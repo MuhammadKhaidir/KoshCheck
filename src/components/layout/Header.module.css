@@ -1,0 +1,118 @@
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background: color-mix(in srgb, var(--paper) 90%, transparent);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--line);
+}
+
+.bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-5);
+  height: var(--header-h);
+}
+
+.brand {
+  display: inline-flex;
+  text-decoration: none;
+}
+
+/* Mobile: menu turun sebagai panel di bawah header */
+.nav {
+  display: none;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  padding: var(--space-3) var(--gutter) var(--space-5);
+  background: var(--paper);
+  border-bottom: 1px solid var(--line);
+}
+
+.nav.open {
+  display: block;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+}
+
+.link {
+  display: block;
+  padding: 0.85rem 0;
+  border-bottom: 1px solid var(--line);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.mobileCta {
+  display: none;
+  padding-top: var(--space-4);
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.toggle {
+  display: inline-grid;
+  place-items: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+  cursor: pointer;
+}
+
+/* Layar sangat sempit: tombol pesan pindah ke dalam menu */
+@media (max-width: 29.99rem) {
+  .cta {
+    display: none;
+  }
+
+  .mobileCta {
+    display: block;
+  }
+}
+
+@media (min-width: 60rem) {
+  .nav {
+    display: block;
+    position: static;
+    margin-left: auto;
+    padding: 0;
+    background: none;
+    border: 0;
+  }
+
+  .list {
+    flex-direction: row;
+    gap: var(--space-5);
+  }
+
+  .link {
+    padding: 0.5rem 0;
+    border: 0;
+    font-size: 0.95rem;
+    font-weight: 500;
+  }
+
+  .link:hover {
+    text-decoration: underline;
+    text-decoration-color: var(--marker-deep);
+    text-decoration-thickness: 3px;
+    text-underline-offset: 6px;
+  }
+
+  .toggle {
+    display: none;
+  }
+}

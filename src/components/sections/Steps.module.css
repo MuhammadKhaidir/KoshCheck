@@ -1,0 +1,81 @@
+.list {
+  display: grid;
+  gap: var(--space-6);
+}
+
+/* Mobile: garis vertikal menyambung angka ke angka berikutnya */
+.step {
+  position: relative;
+  display: grid;
+  grid-template-columns: 2.5rem 1fr;
+  column-gap: var(--space-4);
+  row-gap: var(--space-1);
+}
+
+.step:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  left: calc(1.25rem - 1px);
+  top: 2.9rem;
+  bottom: calc(-1 * var(--space-6) + 0.4rem);
+  width: 2px;
+  height: auto;
+  right: auto;
+  background: var(--ink);
+  opacity: 0.25;
+}
+
+.num {
+  grid-row: 1 / span 2;
+  display: grid;
+  place-items: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 50%;
+  background: var(--ink);
+  color: var(--paper);
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+
+.title {
+  align-self: center;
+  font-size: var(--step-1);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.body {
+  grid-column: 2;
+  color: var(--ink-soft);
+}
+
+@media (min-width: 56rem) {
+  .list {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: var(--space-5);
+  }
+
+  .step {
+    display: block;
+  }
+
+  /* Desktop: garis horizontal dari angka ke angka berikutnya */
+  .step:not(:last-child)::after {
+    top: calc(1.25rem - 1px);
+    bottom: auto;
+    left: 3.25rem;
+    right: calc(-1 * var(--space-5) + 0.5rem);
+    width: auto;
+    height: 2px;
+  }
+
+  .num {
+    margin-bottom: var(--space-4);
+  }
+
+  .body {
+    margin-top: var(--space-2);
+  }
+}

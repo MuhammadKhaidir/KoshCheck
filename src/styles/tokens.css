@@ -1,0 +1,74 @@
+/*
+  Design tokens KOSCHECK
+  ----------------------
+  Semua warna, ukuran huruf, jarak, dan radius dipusatkan di sini.
+  Mengganti tema cukup dengan mengubah nilai di file ini.
+
+  Palet: "Tinta Musi + Penanda Survei"
+  - ink     : teal tua, warna tinta laporan dan teks utama
+  - marker  : kuning penanda surveyor, dipakai hemat sebagai aksen
+  - ok/warn/bad : tiga status hasil survei (sesuai, beda, tidak sesuai)
+*/
+:root {
+  color-scheme: light;
+
+  /* Warna dasar */
+  --ink: #0e2f33;
+  --ink-soft: #2c4b4f;
+  --paper: #f4f7f5;
+  --paper-sunk: #e6ede9;
+  --white: #ffffff;
+  --line: #cad6d0;
+  --muted: #566e71;
+  --on-ink-mute: #a9bfc0;
+
+  /* Aksen */
+  --marker: #f6c324;
+  --marker-deep: #e0aa00;
+
+  /* Status hasil survei */
+  --ok: #1b6e46;
+  --ok-bg: #ddf0e5;
+  --warn: #7f5400;
+  --warn-bg: #fbefc8;
+  --bad: #a8322a;
+  --bad-bg: #f8e0dd;
+
+  /* Warna outline fokus. Di section gelap diganti kuning. */
+  --focus: var(--ink);
+
+  /* Tipografi */
+  --font-display: 'Bricolage Grotesque Variable', 'Hanken Grotesk Variable', system-ui, sans-serif;
+  --font-body: 'Hanken Grotesk Variable', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+
+  --step--1: clamp(0.8125rem, 0.79rem + 0.1vw, 0.875rem);
+  --step-0: clamp(1rem, 0.97rem + 0.15vw, 1.0625rem);
+  --step-1: clamp(1.125rem, 1.07rem + 0.3vw, 1.3125rem);
+  --step-2: clamp(1.375rem, 1.25rem + 0.6vw, 1.75rem);
+  --step-3: clamp(1.75rem, 1.5rem + 1.2vw, 2.5rem);
+  --step-4: clamp(2.25rem, 1.8rem + 2.2vw, 3.5rem);
+
+  /* Jarak */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --space-7: 3rem;
+  --space-8: 4.5rem;
+  --section-y: clamp(3.5rem, 8vw, 6.5rem);
+
+  /* Radius: kecil untuk lembar dan chip data, sedang untuk tombol dan panel */
+  --radius-s: 6px;
+  --radius-m: 10px;
+  --radius-pill: 999px;
+
+  /* Layout */
+  --container: 72rem;
+  --gutter: clamp(1rem, 4vw, 2rem);
+  --header-h: 4rem;
+
+  /* Satu-satunya bayangan: lembar laporan survei */
+  --shadow-sheet: 0 1px 0 rgba(14, 47, 51, 0.06), 0 18px 40px -18px rgba(14, 47, 51, 0.35);
+}

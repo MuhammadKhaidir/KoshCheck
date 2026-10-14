@@ -1,0 +1,111 @@
+.grid {
+  display: grid;
+  gap: var(--space-5);
+  align-items: start;
+}
+
+@media (min-width: 56rem) {
+  .grid {
+    grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+    gap: var(--space-8);
+  }
+}
+
+.panel {
+  padding: var(--space-5);
+  background: var(--white);
+  border: 2px solid var(--ink);
+  border-radius: var(--radius-m);
+}
+
+.modes {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-1);
+  padding: var(--space-1);
+  background: var(--paper-sunk);
+  border-radius: var(--radius-m);
+}
+
+.mode {
+  padding: 0.6rem 0.5rem;
+  background: transparent;
+  border: 0;
+  border-radius: calc(var(--radius-m) - 3px);
+  font-weight: 650;
+  font-size: var(--step--1);
+  cursor: pointer;
+}
+
+.mode[aria-pressed='true'] {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.form {
+  display: grid;
+  gap: var(--space-4);
+  margin-top: var(--space-5);
+}
+
+.field {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.field label {
+  font-size: var(--step--1);
+  font-weight: 650;
+}
+
+.field input,
+.field select,
+.field textarea {
+  width: 100%;
+  padding: 0.7rem 0.85rem;
+  background: var(--white);
+  border: 1.5px solid var(--ink-soft);
+  border-radius: var(--radius-s);
+}
+
+.field textarea {
+  resize: vertical;
+}
+
+.preview {
+  padding: var(--space-4);
+  background: var(--paper);
+  border: 1px dashed var(--ink-soft);
+  border-radius: var(--radius-s);
+}
+
+.previewLabel {
+  font-size: var(--step--1);
+  font-weight: 650;
+  color: var(--muted);
+}
+
+.previewText {
+  margin-top: var(--space-1);
+  overflow-wrap: anywhere;
+}
+
+.status {
+  min-height: 1.5em;
+  font-size: var(--step--1);
+  font-weight: 600;
+  color: var(--ok);
+}
+
+.devHint {
+  padding: var(--space-3);
+  background: var(--warn-bg);
+  border-radius: var(--radius-s);
+  font-size: var(--step--1);
+  color: var(--warn);
+}
+
+.devHint code {
+  font-size: 0.95em;
+  font-weight: 700;
+}

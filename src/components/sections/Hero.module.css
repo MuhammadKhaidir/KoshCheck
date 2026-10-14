@@ -1,0 +1,94 @@
+.hero {
+  padding-block: clamp(2.5rem, 7vw, 5rem) clamp(3.5rem, 8vw, 6rem);
+  overflow-x: clip;
+}
+
+.grid {
+  display: grid;
+  gap: clamp(2.5rem, 6vw, 4.5rem);
+  align-items: center;
+}
+
+@media (min-width: 62rem) {
+  .grid {
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+  }
+}
+
+/* Judul mengikuti lebar kolomnya supaya "baru yakin." selalu muat satu baris */
+.copy {
+  container-type: inline-size;
+}
+
+.title {
+  font-size: clamp(2.75rem, 11vw, 5.5rem);
+  font-size: max(2.75rem, min(14.5cqi, 6.25rem));
+  font-weight: 750;
+  letter-spacing: -0.04em;
+  line-height: 0.92;
+}
+
+.line {
+  display: block;
+  white-space: nowrap;
+}
+
+/* Satu-satunya gerakan otomatis di halaman: kotak dicentang saat halaman dibuka */
+.box {
+  display: inline-block;
+  width: 0.8em;
+  height: 0.8em;
+  margin-right: 0.16em;
+  vertical-align: -0.04em;
+  overflow: visible;
+}
+
+.boxFrame {
+  fill: var(--marker);
+  stroke: var(--ink);
+  stroke-width: 5;
+}
+
+.tick {
+  fill: none;
+  stroke: var(--ink);
+  stroke-width: 9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: draw 0.7s 0.5s cubic-bezier(0.65, 0, 0.35, 1) forwards;
+}
+
+@keyframes draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tick {
+    animation: none;
+    stroke-dashoffset: 0;
+  }
+}
+
+.lede {
+  margin-top: var(--space-5);
+  max-width: 34rem;
+  font-size: var(--step-1);
+  color: var(--ink-soft);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-top: var(--space-6);
+}
+
+.note {
+  margin-top: var(--space-4);
+  font-size: var(--step--1);
+  color: var(--muted);
+}

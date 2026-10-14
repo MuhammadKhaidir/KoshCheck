@@ -1,0 +1,24 @@
+.section {
+  padding-block: var(--section-y);
+  scroll-margin-top: var(--header-h);
+}
+
+.paper {
+  background: var(--paper);
+  color: var(--ink);
+}
+
+.sunk {
+  background: var(--paper-sunk);
+  color: var(--ink);
+  --line: #c3d1ca;
+}
+
+/* Section gelap: warna sekunder dan fokus menyesuaikan otomatis */
+.ink {
+  background: var(--ink);
+  color: var(--paper);
+  --muted: var(--on-ink-mute);
+  --line: rgba(244, 247, 245, 0.22);
+  --focus: var(--marker);
+}

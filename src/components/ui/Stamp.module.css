@@ -1,0 +1,19 @@
+.stamp {
+  transform: rotate(-9deg);
+  mix-blend-mode: multiply;
+  opacity: 0.92;
+  pointer-events: none;
+}
+
+.verified {
+  color: var(--ok);
+}
+
+.rejected {
+  color: var(--bad);
+}
+
+.text {
+  font-family: var(--font-display);
+  font-weight: 800;
+}

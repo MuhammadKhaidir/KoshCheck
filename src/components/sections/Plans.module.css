@@ -1,0 +1,144 @@
+.layout {
+  display: grid;
+  gap: var(--space-7);
+  align-items: start;
+}
+
+@media (min-width: 62rem) {
+  .layout {
+    grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+    gap: var(--space-8);
+  }
+}
+
+/* Perbandingan biaya */
+.compareTitle {
+  font-family: var(--font-display);
+  font-size: var(--step-1);
+  font-weight: 700;
+  padding-bottom: var(--space-4);
+  border-bottom: 2px solid var(--ink);
+}
+
+.bars {
+  display: grid;
+  gap: var(--space-5);
+  padding-top: var(--space-5);
+}
+
+.barHead {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin-bottom: var(--space-2);
+}
+
+.track {
+  height: 1.25rem;
+  background: var(--paper-sunk);
+  border-radius: var(--radius-s);
+}
+
+.fill {
+  height: 100%;
+  border: 2px solid var(--ink);
+  border-radius: var(--radius-s);
+}
+
+.fill[data-kind='trip'] {
+  background: var(--ink);
+}
+
+.fill[data-kind='plan'] {
+  background: var(--marker);
+}
+
+.barDetail {
+  margin-top: var(--space-2);
+  font-size: var(--step--1);
+  color: var(--muted);
+}
+
+.compareNote {
+  margin-top: var(--space-5);
+  font-size: var(--step--1);
+  color: var(--muted);
+}
+
+/* Paket */
+.plans {
+  display: grid;
+  gap: var(--space-4);
+}
+
+@media (min-width: 40rem) {
+  .plans {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.plan {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-5);
+  border: 2px solid var(--ink);
+  border-radius: var(--radius-m);
+}
+
+.plan[data-featured='true'] {
+  --muted: var(--on-ink-mute);
+  --focus: var(--marker);
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.planName {
+  font-size: var(--step-2);
+  font-weight: 750;
+  letter-spacing: -0.02em;
+}
+
+.planSummary {
+  margin-top: var(--space-1);
+  color: var(--muted);
+}
+
+.price {
+  font-family: var(--font-display);
+  font-size: var(--step-3);
+  font-weight: 750;
+  letter-spacing: -0.03em;
+  line-height: 1;
+}
+
+.plan[data-featured='true'] .price {
+  color: var(--marker);
+}
+
+.includes {
+  display: grid;
+  gap: var(--space-3);
+  flex: 1;
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--line);
+}
+
+.plan[data-featured='true'] .includes {
+  border-top-color: rgba(244, 247, 245, 0.22);
+}
+
+.includes li {
+  display: flex;
+  gap: var(--space-2);
+  align-items: flex-start;
+}
+
+.includes svg {
+  flex: none;
+  margin-top: 0.2rem;
+}
+
+.cta {
+  width: 100%;
+}

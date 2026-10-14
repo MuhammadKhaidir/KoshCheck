@@ -1,0 +1,38 @@
+.logo {
+  --mark-bg: var(--ink);
+  --mark-fg: var(--marker);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.onDark {
+  --mark-bg: var(--marker);
+  --mark-fg: var(--ink);
+}
+
+.mark {
+  width: 2rem;
+  height: 2rem;
+  flex: none;
+}
+
+.markBg {
+  fill: var(--mark-bg);
+}
+
+.markFg {
+  fill: none;
+  stroke: var(--mark-fg);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.word {
+  font-family: var(--font-display);
+  font-size: 1.2rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  line-height: 1;
+}
