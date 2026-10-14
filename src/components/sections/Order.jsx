@@ -75,7 +75,7 @@ export default function Order() {
     }
     try {
       await navigator.clipboard.writeText(message)
-      setStatus('Pesan disalin. Tempel ke WhatsApp atau email tim KOSCHECK.')
+      setStatus('Pesan disalin. Tempel ke WhatsApp atau email tim KOSCHECK!.')
     } catch {
       setStatus('Pesan belum bisa disalin otomatis. Salin dari kotak pratinjau di atas.')
     }
