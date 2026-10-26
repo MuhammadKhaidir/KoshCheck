@@ -3,8 +3,9 @@
   API key hanya dibaca di sini lewat environment variable, tidak pernah sampai ke browser.
 
   Env:
-    ANTHROPIC_API_KEY  wajib, isi sendiri
-    AI_MODEL           opsional, default claude-haiku-5-5
+    OPENROUTER_API_KEY  key OpenRouter (diawali sk-or-), model default anthropic/claude-haiku-5.5
+    ANTHROPIC_API_KEY   key Anthropic langsung, dipakai bila OPENROUTER_API_KEY kosong
+    AI_MODEL            opsional, ganti model (pakai nama sesuai penyedia yang dipakai)
 
   Mau pakai penyedia AI lain (OpenAI, Gemini, dll)? Ubah fungsi askModel() saja.
 */
@@ -50,6 +51,24 @@ ${daftarFaq}`
 
 /** Ganti isi fungsi ini bila memakai penyedia AI lain. */
 async function askModel(messages, env) {
+  if (env.OPENROUTER_API_KEY) {
+    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        authorization: `Bearer ${env.OPENROUTER_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: env.AI_MODEL || 'anthropic/claude-haiku-5.5',
+        max_tokens: 400,
+        messages: [{ role: 'system', content: SYSTEM }, ...messages],
+      }),
+    })
+    if (!res.ok) throw new Error(`OpenRouter membalas ${res.status}: ${await res.text()}`)
+    const data = await res.json()
+    return (data.choices?.[0]?.message?.content ?? '').trim()
+  }
+
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -88,7 +107,8 @@ function bersihkan(messages) {
 }
 
 export async function chat(body, env) {
-  if (!env.ANTHROPIC_API_KEY) return { status: 503, data: { error: 'ANTHROPIC_API_KEY belum diisi.' } }
+  if (!env.OPENROUTER_API_KEY && !env.ANTHROPIC_API_KEY)
+    return { status: 503, data: { error: 'OPENROUTER_API_KEY belum diisi.' } }
   const messages = bersihkan(body?.messages)
   if (!messages.length) return { status: 400, data: { error: 'Pesan kosong.' } }
   try {

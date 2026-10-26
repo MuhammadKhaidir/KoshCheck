@@ -1,0 +1,80 @@
+diff --git a/.env.example b/.env.example
+index 6d2a255..a8a4e39 100644
+--- a/.env.example
++++ b/.env.example
+@@ -1,4 +1,5 @@
+-# Salin jadi .env.local (jangan di-commit), lalu isi API key.
++# Salin jadi .env.local (jangan di-commit), lalu isi key. Format wajib NAMA=NILAI, tanpa tanda kutip.
+ # Di Vercel: Project Settings > Environment Variables.
+-ANTHROPIC_API_KEY=
+-# AI_MODEL=claude-haiku-5-5
++OPENROUTER_API_KEY=
++# ANTHROPIC_API_KEY=
++# AI_MODEL=anthropic/claude-haiku-5.5
+diff --git a/README.md b/README.md
+index 0454c15..a506cef 100644
+--- a/README.md
++++ b/README.md
+@@ -54,8 +54,8 @@ Bricolage Grotesque (judul) dan Hanken Grotesk (isi), dipasang lewat paket `@fon
+ 
+ Widget chat di pojok kanan bawah. Pesan dikirim ke `api/chat.js` (Vercel Function), jadi API key tidak pernah ada di kode browser.
+ 
+-1. Salin `.env.example` menjadi `.env.local`, isi `ANTHROPIC_API_KEY`. `npm run dev` otomatis menjalankan `/api/chat`.
+-2. Di Vercel: Project Settings > Environment Variables, tambah `ANTHROPIC_API_KEY`, lalu redeploy.
+-3. Model bisa diganti lewat `AI_MODEL` (default `claude-haiku-5-5`). Pindah ke penyedia AI lain: ubah fungsi `askModel()` di `api/chat.js`.
++1. Salin `.env.example` menjadi `.env.local`, isi `OPENROUTER_API_KEY` (atau `ANTHROPIC_API_KEY`). Restart `npm run dev` setiap file env berubah.
++2. Di Vercel: Project Settings > Environment Variables, tambah `OPENROUTER_API_KEY`, lalu redeploy.
++3. Model bisa diganti lewat `AI_MODEL` (default `anthropic/claude-haiku-5.5` untuk OpenRouter). Pindah ke penyedia AI lain: ubah fungsi `askModel()` di `api/chat.js`.
+ 4. Pengetahuan AI diambil dari `content/site.js` dan `data/kos.js`, jadi ikut berubah saat kontennya diubah. Aturan jawabannya ada di `SYSTEM` pada `api/chat.js`.
+ 5. Teks widget (sapaan, pertanyaan contoh) ada di `content/site.js`, export `chat`.
+diff --git a/api/chat.js b/api/chat.js
+index 1b2e432..06504eb 100644
+--- a/api/chat.js
++++ b/api/chat.js
+@@ -3,8 +3,9 @@
+   API key hanya dibaca di sini lewat environment variable, tidak pernah sampai ke browser.
+ 
+   Env:
+-    ANTHROPIC_API_KEY  wajib, isi sendiri
+-    AI_MODEL           opsional, default claude-haiku-5-5
++    OPENROUTER_API_KEY  key OpenRouter (diawali sk-or-), model default anthropic/claude-haiku-5.5
++    ANTHROPIC_API_KEY   key Anthropic langsung, dipakai bila OPENROUTER_API_KEY kosong
++    AI_MODEL            opsional, ganti model (pakai nama sesuai penyedia yang dipakai)
+ 
+   Mau pakai penyedia AI lain (OpenAI, Gemini, dll)? Ubah fungsi askModel() saja.
+ */
+@@ -50,6 +51,24 @@ ${daftarFaq}`
+ 
+ /** Ganti isi fungsi ini bila memakai penyedia AI lain. */
+ async function askModel(messages, env) {
++  if (env.OPENROUTER_API_KEY) {
++    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
++      method: 'POST',
++      headers: {
++        'content-type': 'application/json',
++        authorization: `Bearer ${env.OPENROUTER_API_KEY}`,
++      },
++      body: JSON.stringify({
++        model: env.AI_MODEL || 'anthropic/claude-haiku-5.5',
++        max_tokens: 400,
++        messages: [{ role: 'system', content: SYSTEM }, ...messages],
++      }),
++    })
++    if (!res.ok) throw new Error(`OpenRouter membalas ${res.status}: ${await res.text()}`)
++    const data = await res.json()
++    return (data.choices?.[0]?.message?.content ?? '').trim()
++  }
++
+   const res = await fetch('https://api.anthropic.com/v1/messages', {
+     method: 'POST',
+     headers: {
+@@ -88,7 +107,8 @@ function bersihkan(messages) {
+ }
+ 
+ export async function chat(body, env) {
+-  if (!env.ANTHROPIC_API_KEY) return { status: 503, data: { error: 'ANTHROPIC_API_KEY belum diisi.' } }
++  if (!env.OPENROUTER_API_KEY && !env.ANTHROPIC_API_KEY)
++    return { status: 503, data: { error: 'OPENROUTER_API_KEY belum diisi.' } }
+   const messages = bersihkan(body?.messages)
+   if (!messages.length) return { status: 400, data: { error: 'Pesan kosong.' } }
+   try {
