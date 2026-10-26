@@ -9,6 +9,7 @@ import Catalog from './components/sections/Catalog.jsx'
 import Owners from './components/sections/Owners.jsx'
 import Faq from './components/sections/Faq.jsx'
 import Order from './components/sections/Order.jsx'
+import ChatWidget from './components/chat/ChatWidget.jsx'
 
 /*
   Urutan section = urutan di halaman.
@@ -33,6 +34,7 @@ export default function App() {
           <Order />
         </main>
         <Footer />
+        <ChatWidget />
       </div>
     </OrderIntentProvider>
   )

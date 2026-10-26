@@ -49,3 +49,13 @@ src/
 ## Tipografi
 
 Bricolage Grotesque (judul) dan Hanken Grotesk (isi), dipasang lewat paket `@fontsource-variable`, jadi tidak butuh koneksi ke Google Fonts.
+
+## Chat AI
+
+Widget chat di pojok kanan bawah. Pesan dikirim ke `api/chat.js` (Vercel Function), jadi API key tidak pernah ada di kode browser.
+
+1. Salin `.env.example` menjadi `.env.local`, isi `ANTHROPIC_API_KEY`. `npm run dev` otomatis menjalankan `/api/chat`.
+2. Di Vercel: Project Settings > Environment Variables, tambah `ANTHROPIC_API_KEY`, lalu redeploy.
+3. Model bisa diganti lewat `AI_MODEL` (default `claude-haiku-5-5`). Pindah ke penyedia AI lain: ubah fungsi `askModel()` di `api/chat.js`.
+4. Pengetahuan AI diambil dari `content/site.js` dan `data/kos.js`, jadi ikut berubah saat kontennya diubah. Aturan jawabannya ada di `SYSTEM` pada `api/chat.js`.
+5. Teks widget (sapaan, pertanyaan contoh) ada di `content/site.js`, export `chat`.

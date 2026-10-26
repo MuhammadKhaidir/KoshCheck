@@ -172,3 +172,20 @@ export const order = {
 
 export const disclaimer =
   'KOSCHECK adalah studi kasus simulasi bisnis. Harga, paket, dan contoh data di halaman ini bersifat ilustrasi.'
+
+/* Teks widget chat AI. Prompt dan data yang dibaca AI ada di api/chat.js. */
+export const chat = {
+  launcher: 'Tanya KOSCHECK',
+  title: 'Tanya KOSCHECK',
+  subtitle: 'Asisten AI untuk soal kos dan survei',
+  greeting: 'Halo, aku asisten KOSCHECK. Mau tanya soal katalog, paket survei, atau cara pesan?',
+  suggestions: [
+    'Apa bedanya Cek Dasar dan Cek Lengkap?',
+    'Kos apa yang harganya di bawah Rp900.000?',
+    'Bagaimana cara pesan survei?',
+  ],
+  placeholder: 'Tulis pertanyaanmu',
+  note: 'Dijawab AI, bisa keliru. Cek detail penting di laporan survei.',
+  error: 'Chat sedang tidak bisa dipakai. Coba lagi sebentar, atau pakai form pemesanan.',
+  retry: 'Coba lagi',
+}
