@@ -17,7 +17,7 @@ export const brand = {
  * Bila dikosongkan, tombol form menjadi "Salin pesan".
  */
 export const contact = {
-  whatsapp: '',
+  whatsapp: '6285709935273',
 }
 
 export const nav = [

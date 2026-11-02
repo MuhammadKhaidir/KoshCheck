@@ -160,7 +160,7 @@ export default function Order() {
             </div>
 
             <Button as="button" type="submit">
-              {waUrl ? 'Kirim lewat WhatsApp' : 'Salin pesan'}
+              {waUrl ? 'Pesan lewat WhatsApp' : 'Salin pesan'}
             </Button>
 
             <p className={s.status} role="status">

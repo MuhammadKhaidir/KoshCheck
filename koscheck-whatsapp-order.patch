@@ -1,0 +1,26 @@
+diff --git a/src/components/sections/Order.jsx b/src/components/sections/Order.jsx
+index e08bf91..88379ba 100644
+--- a/src/components/sections/Order.jsx
++++ b/src/components/sections/Order.jsx
+@@ -160,7 +160,7 @@ export default function Order() {
+             </div>
+ 
+             <Button as="button" type="submit">
+-              {waUrl ? 'Kirim lewat WhatsApp' : 'Salin pesan'}
++              {waUrl ? 'Pesan lewat WhatsApp' : 'Salin pesan'}
+             </Button>
+ 
+             <p className={s.status} role="status">
+diff --git a/src/content/site.js b/src/content/site.js
+index 8057849..4aac686 100644
+--- a/src/content/site.js
++++ b/src/content/site.js
+@@ -17,7 +17,7 @@ export const brand = {
+  * Bila dikosongkan, tombol form menjadi "Salin pesan".
+  */
+ export const contact = {
+-  whatsapp: '',
++  whatsapp: '6285709935273',
+ }
+ 
+ export const nav = [
