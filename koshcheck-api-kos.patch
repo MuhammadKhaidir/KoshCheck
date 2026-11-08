@@ -1,0 +1,407 @@
+diff --git a/api/kos/index.js b/api/kos/index.js
+new file mode 100644
+index 0000000..8b400eb
+--- /dev/null
++++ b/api/kos/index.js
+@@ -0,0 +1,109 @@
++import { createClient } from '@supabase/supabase-js';
++
++const supabase = createClient(
++  process.env.SUPABASE_URL,
++  process.env.SUPABASE_SERVICE_ROLE_KEY,
++  { auth: { persistSession: false } }
++);
++
++// Kolom yang boleh tampil ke publik. nama_pemilik & status sengaja tidak disertakan.
++const PUBLIC_COLUMNS =
++  'id, nama, alamat, kota, tipe, harga, whatsapp, deskripsi, fasilitas, foto, latitude, longitude, created_at';
++
++const TIPE = ['putra', 'putri', 'campur'];
++const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
++
++const first = (v) => (Array.isArray(v) ? v[0] : v);
++
++function toInt(value, fallback, { min = 0, max = Number.MAX_SAFE_INTEGER } = {}) {
++  const n = Number.parseInt(first(value), 10);
++  if (Number.isNaN(n)) return fallback;
++  return Math.min(Math.max(n, min), max);
++}
++
++// Buang karakter yang punya arti khusus di filter PostgREST / pola ILIKE.
++const sanitizeSearch = (s) => String(s).replace(/[,()%*_\\]/g, ' ').trim().slice(0, 60);
++
++export default async function handler(req, res) {
++  if (req.method !== 'GET') {
++    res.setHeader('Allow', 'GET');
++    return res.status(405).json({ error: 'Method not allowed' });
++  }
++
++  try {
++    // Detail satu kos: GET /api/kos?id=<uuid>
++    const id = first(req.query.id);
++    if (id) {
++      if (!UUID_RE.test(id)) {
++        return res.status(400).json({ error: 'Parameter id tidak valid' });
++      }
++      const { data, error } = await supabase
++        .from('kos')
++        .select(PUBLIC_COLUMNS)
++        .eq('id', id)
++        .eq('status', 'approved')
++        .maybeSingle();
++
++      if (error) throw error;
++      if (!data) return res.status(404).json({ error: 'Kos tidak ditemukan' });
++
++      res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=300');
++      return res.status(200).json({ data });
++    }
++
++    // List: hanya kos yang sudah di-approve
++    const page = toInt(req.query.page, 1, { min: 1, max: 10000 });
++    const limit = toInt(req.query.limit, 12, { min: 1, max: 50 });
++    const from = (page - 1) * limit;
++    const to = from + limit - 1;
++
++    let query = supabase
++      .from('kos')
++      .select(PUBLIC_COLUMNS, { count: 'exact' })
++      .eq('status', 'approved')
++      .order('created_at', { ascending: false })
++      .range(from, to);
++
++    const tipe = first(req.query.tipe);
++    if (tipe) {
++      if (!TIPE.includes(tipe)) {
++        return res.status(400).json({ error: `tipe harus salah satu dari: ${TIPE.join(', ')}` });
++      }
++      query = query.eq('tipe', tipe);
++    }
++
++    const kota = first(req.query.kota);
++    if (kota) {
++      const k = sanitizeSearch(kota);
++      if (k) query = query.ilike('kota', k);
++    }
++
++    const minHarga = toInt(req.query.min_harga, null, { min: 0 });
++    const maxHarga = toInt(req.query.max_harga, null, { min: 0 });
++    if (minHarga !== null) query = query.gte('harga', minHarga);
++    if (maxHarga !== null) query = query.lte('harga', maxHarga);
++
++    const q = first(req.query.q);
++    if (q) {
++      const s = sanitizeSearch(q);
++      if (s) query = query.or(`nama.ilike.%${s}%,alamat.ilike.%${s}%`);
++    }
++
++    const { data, count, error } = await query;
++    if (error) throw error;
++
++    res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=300');
++    return res.status(200).json({
++      data: data ?? [],
++      meta: {
++        page,
++        limit,
++        total: count ?? 0,
++        total_pages: Math.max(1, Math.ceil((count ?? 0) / limit)),
++      },
++    });
++  } catch (err) {
++    console.error('[api/kos] gagal mengambil data:', err);
++    return res.status(500).json({ error: 'Terjadi kesalahan pada server' });
++  }
++}
+diff --git a/api/kos/register.js b/api/kos/register.js
+new file mode 100644
+index 0000000..df4c1a0
+--- /dev/null
++++ b/api/kos/register.js
+@@ -0,0 +1,245 @@
++import { createClient } from '@supabase/supabase-js';
++import formidable from 'formidable';
++import { randomUUID } from 'node:crypto';
++import { readFile, unlink } from 'node:fs/promises';
++
++// Body parser bawaan dimatikan supaya formidable bisa membaca multipart/form-data.
++export const config = { api: { bodyParser: false } };
++
++const supabase = createClient(
++  process.env.SUPABASE_URL,
++  process.env.SUPABASE_SERVICE_ROLE_KEY,
++  { auth: { persistSession: false } }
++);
++
++const BUCKET = 'kos-foto';
++const MAX_FOTO = 5;
++const MIN_FOTO = 1;
++const MAX_FOTO_SIZE = 5 * 1024 * 1024; // 5 MB per foto
++const MAX_TOTAL_SIZE = 20 * 1024 * 1024; // 20 MB total
++const TIPE = ['putra', 'putri', 'campur'];
++
++// ---------- helpers ----------
++
++const field = (fields, key) => String(fields[key]?.[0] ?? '').trim();
++
++// Cek tipe file dari isi sebenarnya (magic bytes), bukan dari header/ekstensi dari client.
++function detectImage(buf) {
++  if (buf.length < 12) return null;
++  if (buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) {
++    return { ext: 'jpg', contentType: 'image/jpeg' };
++  }
++  if (
++    buf.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))
++  ) {
++    return { ext: 'png', contentType: 'image/png' };
++  }
++  if (buf.toString('ascii', 0, 4) === 'RIFF' && buf.toString('ascii', 8, 12) === 'WEBP') {
++    return { ext: 'webp', contentType: 'image/webp' };
++  }
++  return null;
++}
++
++// Terima 08xx, 628xx, +628xx -> simpan sebagai 628xx
++function normalizeWhatsapp(raw) {
++  const cleaned = raw.replace(/[\s\-().]/g, '');
++  if (!/^(\+62|62|0)8[1-9]\d{7,11}$/.test(cleaned)) return null;
++  return cleaned.replace(/^\+?62/, '62').replace(/^0/, '62');
++}
++
++function parseFasilitas(fields) {
++  const raw = fields.fasilitas ?? [];
++  const items = raw
++    .flatMap((v) => String(v).split(','))
++    .map((s) => s.trim())
++    .filter(Boolean);
++  return [...new Set(items)];
++}
++
++function validate(fields) {
++  const errors = {};
++
++  const nama = field(fields, 'nama');
++  if (nama.length < 3 || nama.length > 100) errors.nama = 'Nama kos 3-100 karakter';
++
++  const namaPemilik = field(fields, 'nama_pemilik');
++  if (namaPemilik.length < 3 || namaPemilik.length > 100) {
++    errors.nama_pemilik = 'Nama pemilik 3-100 karakter';
++  }
++
++  const alamat = field(fields, 'alamat');
++  if (alamat.length < 10 || alamat.length > 300) errors.alamat = 'Alamat 10-300 karakter';
++
++  const kota = field(fields, 'kota');
++  if (kota.length < 2 || kota.length > 60) errors.kota = 'Kota 2-60 karakter';
++
++  const tipe = field(fields, 'tipe').toLowerCase();
++  if (!TIPE.includes(tipe)) errors.tipe = `Tipe harus salah satu dari: ${TIPE.join(', ')}`;
++
++  // Boleh dikirim "1.500.000" atau "1500000"
++  const hargaRaw = field(fields, 'harga').replace(/[.\s]/g, '');
++  const harga = /^\d+$/.test(hargaRaw) ? Number(hargaRaw) : NaN;
++  if (!Number.isInteger(harga) || harga < 50_000 || harga > 50_000_000) {
++    errors.harga = 'Harga per bulan harus angka antara Rp50.000 dan Rp50.000.000';
++  }
++
++  const whatsapp = normalizeWhatsapp(field(fields, 'whatsapp'));
++  if (!whatsapp) errors.whatsapp = 'Nomor WhatsApp tidak valid (contoh: 081234567890)';
++
++  const deskripsi = field(fields, 'deskripsi');
++  if (deskripsi.length > 2000) errors.deskripsi = 'Deskripsi maksimal 2000 karakter';
++
++  const fasilitas = parseFasilitas(fields);
++  if (fasilitas.length > 20 || fasilitas.some((f) => f.length > 40)) {
++    errors.fasilitas = 'Maksimal 20 fasilitas, masing-masing maksimal 40 karakter';
++  }
++
++  // Koordinat opsional, tapi kalau diisi harus lengkap dan masuk akal untuk Indonesia
++  let latitude = null;
++  let longitude = null;
++  const latRaw = field(fields, 'latitude');
++  const lngRaw = field(fields, 'longitude');
++  if (latRaw || lngRaw) {
++    latitude = Number(latRaw);
++    longitude = Number(lngRaw);
++    const ok =
++      latRaw &&
++      lngRaw &&
++      Number.isFinite(latitude) &&
++      Number.isFinite(longitude) &&
++      latitude >= -11.5 &&
++      latitude <= 6.5 &&
++      longitude >= 94 &&
++      longitude <= 141.5;
++    if (!ok) errors.koordinat = 'Koordinat tidak valid (harus berada di wilayah Indonesia)';
++  }
++
++  return {
++    errors,
++    value: {
++      nama,
++      nama_pemilik: namaPemilik,
++      alamat,
++      kota,
++      tipe,
++      harga,
++      whatsapp,
++      deskripsi,
++      fasilitas,
++      latitude,
++      longitude,
++    },
++  };
++}
++
++function parseForm(req) {
++  const form = formidable({
++    multiples: true,
++    maxFiles: MAX_FOTO,
++    maxFileSize: MAX_FOTO_SIZE,
++    maxTotalFileSize: MAX_TOTAL_SIZE,
++    allowEmptyFiles: false,
++    filter: ({ name }) => name === 'foto', // abaikan file di field lain
++  });
++  return new Promise((resolve, reject) => {
++    form.parse(req, (err, fields, files) => (err ? reject(err) : resolve({ fields, files })));
++  });
++}
++
++// ---------- handler ----------
++
++export default async function handler(req, res) {
++  if (req.method !== 'POST') {
++    res.setHeader('Allow', 'POST');
++    return res.status(405).json({ error: 'Method not allowed' });
++  }
++
++  const contentType = req.headers['content-type'] || '';
++  if (!contentType.startsWith('multipart/form-data')) {
++    return res.status(415).json({ error: 'Gunakan multipart/form-data' });
++  }
++
++  let tmpFiles = [];
++  const uploadedPaths = [];
++
++  try {
++    let parsed;
++    try {
++      parsed = await parseForm(req);
++    } catch (err) {
++      const status = err.httpCode === 413 ? 413 : 400;
++      const message =
++        status === 413
++          ? `Foto terlalu besar (maks ${MAX_FOTO_SIZE / 1024 / 1024} MB per foto)`
++          : 'Form tidak dapat dibaca atau jumlah foto melebihi batas';
++      return res.status(status).json({ error: message });
++    }
++
++    const { fields, files } = parsed;
++    tmpFiles = files.foto ?? [];
++
++    // Honeypot: bot biasanya mengisi semua input. Pura-pura sukses, jangan simpan apa pun.
++    if (field(fields, 'website')) {
++      return res.status(201).json({ message: 'Pendaftaran diterima' });
++    }
++
++    const { errors, value } = validate(fields);
++
++    if (tmpFiles.length < MIN_FOTO || tmpFiles.length > MAX_FOTO) {
++      errors.foto = `Upload ${MIN_FOTO}-${MAX_FOTO} foto`;
++    }
++
++    // Validasi isi file foto
++    const images = [];
++    if (!errors.foto) {
++      for (const f of tmpFiles) {
++        const buf = await readFile(f.filepath);
++        const type = detectImage(buf);
++        if (!type) {
++          errors.foto = 'Foto harus berformat JPG, PNG, atau WebP';
++          break;
++        }
++        images.push({ buf, ...type });
++      }
++    }
++
++    if (Object.keys(errors).length > 0) {
++      return res.status(422).json({ error: 'Validasi gagal', details: errors });
++    }
++
++    // Upload foto ke storage
++    const id = randomUUID();
++    const urls = [];
++    for (let i = 0; i < images.length; i++) {
++      const { buf, ext, contentType: ct } = images[i];
++      const path = `${id}/${i + 1}.${ext}`;
++      const { error: upErr } = await supabase.storage
++        .from(BUCKET)
++        .upload(path, buf, { contentType: ct, upsert: false });
++      if (upErr) throw upErr;
++      uploadedPaths.push(path);
++      urls.push(supabase.storage.from(BUCKET).getPublicUrl(path).data.publicUrl);
++    }
++
++    // Simpan data. Kolom status SELALU 'pending' dan tidak pernah dibaca dari input client.
++    const { error: insErr } = await supabase
++      .from('kos')
++      .insert({ id, ...value, foto: urls, status: 'pending' });
++    if (insErr) throw insErr;
++
++    return res.status(201).json({
++      message: 'Pendaftaran diterima dan menunggu verifikasi tim KoshCheck',
++      id,
++      status: 'pending',
++    });
++  } catch (err) {
++    console.error('[api/kos/register] gagal:', err);
++    // Bersihkan foto yang sudah terlanjur terupload supaya tidak jadi file yatim
++    if (uploadedPaths.length > 0) {
++      await supabase.storage.from(BUCKET).remove(uploadedPaths).catch(() => {});
++    }
++    return res.status(500).json({ error: 'Terjadi kesalahan pada server' });
++  } finally {
++    await Promise.all(tmpFiles.map((f) => unlink(f.filepath).catch(() => {})));
++  }
++}
+diff --git a/db/kos.sql b/db/kos.sql
+new file mode 100644
+index 0000000..43b3173
+--- /dev/null
++++ b/db/kos.sql
+@@ -0,0 +1,35 @@
++-- Skema tabel kos untuk alur verifikasi KoshCheck.
++-- Jalankan sekali di Supabase SQL Editor.
++
++create table if not exists public.kos (
++  id           uuid primary key default gen_random_uuid(),
++  nama         text not null,
++  nama_pemilik text not null,
++  alamat       text not null,
++  kota         text not null,
++  tipe         text not null check (tipe in ('putra', 'putri', 'campur')),
++  harga        integer not null check (harga > 0),
++  whatsapp     text not null,
++  deskripsi    text not null default '',
++  fasilitas    text[] not null default '{}',
++  foto         text[] not null default '{}',
++  latitude     double precision,
++  longitude    double precision,
++  status       text not null default 'pending' check (status in ('pending', 'approved', 'rejected')),
++  created_at   timestamptz not null default now(),
++  approved_at  timestamptz
++);
++
++create index if not exists kos_status_created_idx on public.kos (status, created_at desc);
++
++-- RLS aktif tanpa policy: hanya service role (dipakai di api/) yang bisa baca/tulis.
++alter table public.kos enable row level security;
++
++-- Bucket foto (publik untuk dibaca, upload hanya lewat service role dari server).
++insert into storage.buckets (id, name, public)
++values ('kos-foto', 'kos-foto', true)
++on conflict (id) do nothing;
++
++-- Cara approve / reject kos (manual dari SQL Editor atau dashboard admin):
++--   update public.kos set status = 'approved', approved_at = now() where id = '<uuid>';
++--   update public.kos set status = 'rejected' where id = '<uuid>';
