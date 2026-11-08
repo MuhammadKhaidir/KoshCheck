@@ -109,3 +109,32 @@
   font-size: 0.95em;
   font-weight: 700;
 }
+
+.hint {
+  font-size: var(--step--1);
+  color: var(--muted);
+}
+
+.actions {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.error {
+  padding: var(--space-3);
+  background: var(--bad-bg);
+  border-radius: var(--radius-s);
+  font-size: var(--step--1);
+  font-weight: 600;
+  color: var(--bad);
+}
+
+.done {
+  display: grid;
+  gap: var(--space-3);
+  justify-items: start;
+  padding: var(--space-4);
+  background: var(--ok-bg);
+  border-radius: var(--radius-s);
+  overflow-wrap: anywhere;
+}
