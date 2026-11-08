@@ -64,7 +64,7 @@ async function askModel(messages, env) {
         messages: [{ role: 'system', content: SYSTEM }, ...messages],
       }),
     })
-    if (!res.ok) throw new Error(`OpenRouter membalas ${res.status}: ${await res.text()}`)
+    if (!res.ok) throw new Error(`OpenRouter membalas HTTP ${res.status}`)
     const data = await res.json()
     return (data.choices?.[0]?.message?.content ?? '').trim()
   }
@@ -83,7 +83,7 @@ async function askModel(messages, env) {
       messages,
     }),
   })
-  if (!res.ok) throw new Error(`Penyedia AI membalas ${res.status}: ${await res.text()}`)
+  if (!res.ok) throw new Error(`Penyedia AI membalas HTTP ${res.status}`)
   const data = await res.json()
   return (data.content ?? [])
     .filter((b) => b.type === 'text')
@@ -108,7 +108,7 @@ function bersihkan(messages) {
 
 export async function chat(body, env) {
   if (!env.OPENROUTER_API_KEY && !env.ANTHROPIC_API_KEY)
-    return { status: 503, data: { error: 'OPENROUTER_API_KEY belum diisi.' } }
+    return { status: 503, data: { error: 'Isi OPENROUTER_API_KEY atau ANTHROPIC_API_KEY di .env.local, lalu restart npm run dev.' } }
   const messages = bersihkan(body?.messages)
   if (!messages.length) return { status: 400, data: { error: 'Pesan kosong.' } }
   try {
