@@ -69,3 +69,8 @@
   background: var(--paper);
   color: var(--ink);
 }
+
+.btn:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}

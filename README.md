@@ -59,3 +59,15 @@ Widget chat di pojok kanan bawah. Pesan dikirim ke `api/chat.js` (Vercel Functio
 3. Model bisa diganti lewat `AI_MODEL` (default `anthropic/claude-haiku-5.5` untuk OpenRouter). Pindah ke penyedia AI lain: ubah fungsi `askModel()` di `api/chat.js`.
 4. Pengetahuan AI diambil dari `content/site.js` dan `data/kos.js`, jadi ikut berubah saat kontennya diubah. Aturan jawabannya ada di `SYSTEM` pada `api/chat.js`.
 5. Teks widget (sapaan, pertanyaan contoh) ada di `content/site.js`, export `chat`.
+
+## Pembayaran (Midtrans)
+
+Form pesan survei membuka jendela pembayaran Midtrans Snap di halaman yang sama (QRIS, transfer bank, e-wallet, dan metode lain yang diaktifkan di akun Midtrans). Harga selalu diambil server dari `plans` di `content/site.js`, bukan dari browser.
+
+1. Daftar di Midtrans, buka mode **Sandbox**, ambil Server Key dan Client Key (Settings > Access Keys).
+2. Isi `MIDTRANS_SERVER_KEY` dan `MIDTRANS_CLIENT_KEY` di `.env.local` (lihat `.env.example`), restart `npm run dev`. Di Vercel: Project Settings > Environment Variables, lalu redeploy.
+3. Uji bayar dengan simulator sandbox Midtrans. Tidak ada uang sungguhan yang berpindah.
+4. Setelah deploy, isi **Payment Notification URL** di dashboard Midtrans (Settings > Configuration) dengan `https://DOMAIN-KAMU/api/pay-notify`. Endpoint itu memverifikasi `signature_key` dan memanggil `onPaid()` di `api/pay-notify.js` saat pembayaran lunas. Isi fungsi itu untuk kirim email/WhatsApp ke tim atau simpan ke database.
+5. Uang sungguhan: setelah akun Midtrans disetujui untuk production, ganti kedua key dengan key production dan set `MIDTRANS_IS_PRODUCTION=true`. Hapus juga `disclaimer` simulasi di `content/site.js`.
+
+File terkait: `api/pay.js` (buat transaksi), `api/pay-notify.js` (webhook), `src/lib/snap.js` (buka jendela bayar), `src/components/sections/Order.jsx` (form).

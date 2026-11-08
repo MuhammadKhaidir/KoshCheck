@@ -5,6 +5,7 @@ import Button from '../ui/Button.jsx'
 import { useOrderIntent } from '../../context/OrderIntent.jsx'
 import { order, plans, contact, brand } from '../../content/site.js'
 import { rupiah } from '../../lib/format.js'
+import { payWithSnap } from '../../lib/snap.js'
 import s from './Order.module.css'
 
 const MODES = [
@@ -13,7 +14,7 @@ const MODES = [
 ]
 
 const initialForms = {
-  survei: { nama: '', kos: '', paket: plans.items[0].id, catatan: '' },
+  survei: { nama: '', whatsapp: '', kos: '', paket: plans.items[0].id, catatan: '' },
   pemilik: { nama: '', kos: '', area: '', catatan: '' },
 }
 
@@ -39,12 +40,17 @@ export default function Order() {
   const [mode, setMode] = useState('survei')
   const [forms, setForms] = useState(initialForms)
   const [status, setStatus] = useState('')
+  const [error, setError] = useState('')
+  const [paying, setPaying] = useState(false)
+  const [done, setDone] = useState(null)
 
   // Tombol lain di halaman (paket, katalog, pemilik kos) mengisi form lewat intent
   useEffect(() => {
     if (!intent.nonce) return
     setMode(intent.mode)
     setStatus('')
+    setError('')
+    setDone(null)
     if (intent.mode === 'survei') {
       setForms((prev) => ({
         ...prev,
@@ -66,8 +72,55 @@ export default function Order() {
   const message = composeMessage(mode, form)
   const waUrl = contact.whatsapp ? `https://wa.me/${contact.whatsapp}?text=${encodeURIComponent(message)}` : ''
 
+  const plan = plans.items.find((p) => p.id === forms.survei.paket) ?? plans.items[0]
+
+  function finish(orderId, state) {
+    setDone({ orderId, state, nama: form.nama.trim(), kos: form.kos.trim(), plan: plan.name })
+    setStatus(
+      state === 'paid'
+        ? 'Pembayaran berhasil. Terima kasih!'
+        : 'Menunggu pembayaran. Selesaikan sesuai petunjuk di jendela pembayaran sebelum kedaluwarsa.',
+    )
+  }
+
+  /** Buat transaksi di server (/api/pay), lalu buka jendela pembayaran Midtrans di halaman ini. */
+  async function pay() {
+    setStatus('')
+    setError('')
+    setDone(null)
+    setPaying(true)
+    try {
+      const res = await fetch('/api/pay', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(form),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error || 'Pembayaran belum bisa dimulai. Coba lagi sebentar.')
+      await payWithSnap(data, {
+        onSuccess: () => finish(data.orderId, 'paid'),
+        onPending: () => finish(data.orderId, 'pending'),
+        onError: () => setError('Pembayaran gagal. Coba lagi, atau pesan lewat WhatsApp.'),
+        onClose: () => setStatus((prev) => prev || 'Jendela pembayaran ditutup sebelum selesai. Tekan Bayar untuk mencoba lagi.'),
+      })
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setPaying(false)
+    }
+  }
+
+  const confirmUrl =
+    done && contact.whatsapp
+      ? `https://wa.me/${contact.whatsapp}?text=${encodeURIComponent(
+          `Halo ${brand.name}, saya ${done.nama}. Pesanan ${done.orderId}: survei ${done.plan} untuk kos ${done.kos}.` +
+            (done.state === 'paid' ? ' Pembayaran sudah selesai.' : ''),
+        )}`
+      : ''
+
   async function handleSubmit(event) {
     event.preventDefault()
+    if (mode === 'survei') return pay()
     if (waUrl) {
       window.open(waUrl, '_blank', 'noopener,noreferrer')
       setStatus('Membuka WhatsApp.')
@@ -99,6 +152,8 @@ export default function Order() {
                 onClick={() => {
                   setMode(m.id)
                   setStatus('')
+                  setError('')
+                  setDone(null)
                 }}
               >
                 {m.label}
@@ -111,6 +166,23 @@ export default function Order() {
               <label htmlFor={id('nama')}>Nama</label>
               <input id={id('nama')} type="text" required autoComplete="name" value={form.nama} onChange={update('nama')} />
             </div>
+
+            {mode === 'survei' && (
+              <div className={s.field}>
+                <label htmlFor={id('whatsapp')}>Nomor WhatsApp</label>
+                <input
+                  id={id('whatsapp')}
+                  type="tel"
+                  inputMode="tel"
+                  required
+                  autoComplete="tel"
+                  placeholder="Contoh: 081234567890"
+                  value={form.whatsapp}
+                  onChange={update('whatsapp')}
+                />
+                <p className={s.hint}>Tim KOSCHECK memakai nomor ini untuk mengirim laporan survei.</p>
+              </div>
+            )}
 
             <div className={s.field}>
               <label htmlFor={id('kos')}>{mode === 'survei' ? 'Kos yang ingin dicek' : 'Nama kosmu'}</label>
@@ -155,17 +227,60 @@ export default function Order() {
             </div>
 
             <div className={s.preview}>
-              <p className={s.previewLabel}>Pesan yang akan dikirim</p>
-              <p className={s.previewText}>{message}</p>
+              {mode === 'survei' ? (
+                <>
+                  <p className={s.previewLabel}>Yang kamu bayar</p>
+                  <p className={s.previewText}>
+                    Survei {plan.name}, {rupiah(plan.price)}. Metode pembayaran dipilih di langkah berikutnya.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className={s.previewLabel}>Pesan yang akan dikirim</p>
+                  <p className={s.previewText}>{message}</p>
+                </>
+              )}
             </div>
 
-            <Button as="button" type="submit">
-              {waUrl ? 'Pesan lewat WhatsApp' : 'Salin pesan'}
-            </Button>
+            {mode === 'survei' ? (
+              <div className={s.actions}>
+                <Button as="button" type="submit" disabled={paying}>
+                  {paying ? 'Menyiapkan pembayaran' : `Bayar ${rupiah(plan.price)}`}
+                </Button>
+                {waUrl && (
+                  <Button as="a" variant="secondary" href={waUrl} target="_blank" rel="noopener noreferrer">
+                    Tanya dulu lewat WhatsApp
+                  </Button>
+                )}
+              </div>
+            ) : (
+              <Button as="button" type="submit">
+                {waUrl ? 'Pesan lewat WhatsApp' : 'Salin pesan'}
+              </Button>
+            )}
 
             <p className={s.status} role="status">
               {status}
             </p>
+
+            {error && (
+              <p className={s.error} role="alert">
+                {error}
+              </p>
+            )}
+
+            {done && (
+              <div className={s.done}>
+                <p>
+                  Nomor pesanan: <strong>{done.orderId}</strong>
+                </p>
+                {confirmUrl && (
+                  <Button as="a" variant="secondary" size="sm" href={confirmUrl} target="_blank" rel="noopener noreferrer">
+                    Kirim nomor pesanan ke WhatsApp
+                  </Button>
+                )}
+              </div>
+            )}
 
             {import.meta.env.DEV && !contact.whatsapp && (
               <p className={s.devHint}>
