@@ -5,7 +5,9 @@
   Env:
     OPENROUTER_API_KEY  key OpenRouter (diawali sk-or-), model default anthropic/claude-haiku-5.5
     ANTHROPIC_API_KEY   key Anthropic langsung, dipakai bila OPENROUTER_API_KEY kosong
-    AI_MODEL            opsional, ganti model (pakai nama sesuai penyedia yang dipakai)
+    AI_MODEL            opsional, ganti model. Boleh beberapa dipisah koma (dicoba berurutan):
+                        google/gemma-4-31b-it:free,google/gemma-4-26b-a4b-it:free
+    AI_MAX_TOKENS       opsional, batas panjang balasan (default 600)
 
   Mau pakai penyedia AI lain (OpenAI, Gemini, dll)? Ubah fungsi askModel() saja.
 */
@@ -49,24 +51,55 @@ Untuk pemilik kos: ${owners.body}
 FAQ:
 ${daftarFaq}`
 
+/** AI_MODEL boleh berisi beberapa model dipisah koma. Dicoba berurutan sampai ada yang berhasil. */
+function daftarModel(env, bawaan) {
+  const list = String(env.AI_MODEL || bawaan)
+    .split(',')
+    .map((m) => m.trim())
+    .filter(Boolean)
+  return list.length ? list : [bawaan]
+}
+
+async function askOpenRouter(model, messages, env) {
+  const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      authorization: `Bearer ${env.OPENROUTER_API_KEY}`,
+    },
+    body: JSON.stringify({
+      model,
+      max_tokens: Number(env.AI_MAX_TOKENS) || 600,
+      messages: [{ role: 'system', content: SYSTEM }, ...messages],
+    }),
+    signal: AbortSignal.timeout(7000),
+  })
+  if (!res.ok) {
+    const err = new Error(`${model} membalas ${res.status}: ${(await res.text()).slice(0, 300)}`)
+    err.status = res.status
+    throw err
+  }
+  const data = await res.json()
+  const text = (data.choices?.[0]?.message?.content ?? '').trim()
+  if (!text) throw new Error(`${model} membalas kosong`)
+  return text
+}
+
 /** Ganti isi fungsi ini bila memakai penyedia AI lain. */
 async function askModel(messages, env) {
   if (env.OPENROUTER_API_KEY) {
-    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        authorization: `Bearer ${env.OPENROUTER_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: env.AI_MODEL || 'anthropic/claude-haiku-5.5',
-        max_tokens: 400,
-        messages: [{ role: 'system', content: SYSTEM }, ...messages],
-      }),
-    })
-    if (!res.ok) throw new Error(`OpenRouter membalas ${res.status}: ${await res.text()}`)
-    const data = await res.json()
-    return (data.choices?.[0]?.message?.content ?? '').trim()
+    const gagal = []
+    const mulai = Date.now()
+    for (const model of daftarModel(env, 'anthropic/claude-haiku-5.5')) {
+      if (gagal.length && Date.now() - mulai > 12000) break
+      try {
+        return await askOpenRouter(model, messages, env)
+      } catch (err) {
+        gagal.push(err.name === 'TimeoutError' ? `${model} timeout` : err.message)
+        if (err.status === 401) break // key salah: model lain tidak akan membantu
+      }
+    }
+    throw new Error(`OpenRouter gagal: ${gagal.join(' | ')}`)
   }
 
   const res = await fetch('https://api.anthropic.com/v1/messages', {
@@ -77,7 +110,7 @@ async function askModel(messages, env) {
       'anthropic-version': '2023-06-01',
     },
     body: JSON.stringify({
-      model: env.AI_MODEL || 'claude-haiku-5-5',
+      model: daftarModel(env, 'claude-haiku-5-5')[0],
       max_tokens: 400,
       system: SYSTEM,
       messages,
