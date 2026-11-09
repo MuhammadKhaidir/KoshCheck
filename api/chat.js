@@ -9,6 +9,9 @@
                         google/gemma-4-31b-it:free,google/gemma-4-26b-a4b-it:free
     AI_MAX_TOKENS       opsional, batas panjang balasan (default 600)
 
+  Kalau ada model ':free' di daftar, 'openrouter/free' otomatis ditambahkan di urutan terakhir
+  sebagai cadangan (router OpenRouter yang memilih sendiri model gratis yang sedang tersedia).
+
   Mau pakai penyedia AI lain (OpenAI, Gemini, dll)? Ubah fungsi askModel() saja.
 */
 import { brand, hero, plans, owners, faq, disclaimer } from '../src/content/site.js'
@@ -60,6 +63,15 @@ function daftarModel(env, bawaan) {
   return list.length ? list : [bawaan]
 }
 
+const ROUTER_GRATIS = 'openrouter/free'
+
+/** Model gratis sering kena 429 (rate limit). Tambah router gratis sebagai cadangan terakhir. */
+function urutanOpenRouter(env) {
+  const list = daftarModel(env, 'anthropic/claude-haiku-5.5')
+  if (list.some((m) => m.endsWith(':free')) && !list.includes(ROUTER_GRATIS)) list.push(ROUTER_GRATIS)
+  return list
+}
+
 async function askOpenRouter(model, messages, env) {
   const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',
@@ -90,7 +102,7 @@ async function askModel(messages, env) {
   if (env.OPENROUTER_API_KEY) {
     const gagal = []
     const mulai = Date.now()
-    for (const model of daftarModel(env, 'anthropic/claude-haiku-5.5')) {
+    for (const model of urutanOpenRouter(env)) {
       if (gagal.length && Date.now() - mulai > 12000) break
       try {
         return await askOpenRouter(model, messages, env)
@@ -99,7 +111,9 @@ async function askModel(messages, env) {
         if (err.status === 401) break // key salah: model lain tidak akan membantu
       }
     }
-    throw new Error(`OpenRouter gagal: ${gagal.join(' | ')}`)
+    const err = new Error(`OpenRouter gagal: ${gagal.join(' | ')}`)
+    err.semuaLimit = gagal.length > 0 && gagal.every((g) => / (429|402):/.test(g) || g.includes('timeout'))
+    throw err
   }
 
   const res = await fetch('https://api.anthropic.com/v1/messages', {
@@ -149,6 +163,8 @@ export async function chat(body, env) {
     return reply ? { status: 200, data: { reply } } : { status: 502, data: { error: 'Balasan kosong.' } }
   } catch (err) {
     console.error('[chat]', err)
+    if (err.semuaLimit)
+      return { status: 503, data: { error: 'AI sedang ramai, coba lagi sebentar.' } }
     return { status: 502, data: { error: 'AI tidak bisa dihubungi.' } }
   }
 }
