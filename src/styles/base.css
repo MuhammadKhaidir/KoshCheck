@@ -27,6 +27,21 @@ body {
   text-rendering: optimizeLegibility;
 }
 
+/*
+  Background utama seluruh halaman.
+  PNG-nya transparan di tengah, jadi warna --paper di body tetap jadi dasarnya.
+  Dipasang sebagai layer fixed (bukan background-attachment: fixed) supaya tetap
+  mulus di iOS Safari. Lebar gambar selalu pas layar, menempel di bawah.
+*/
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: url('../components/asssets/BgKoscekMain.png') center bottom / 100% auto no-repeat;
+}
+
 h1,
 h2,
 h3,

@@ -3,13 +3,14 @@
   scroll-margin-top: var(--header-h);
 }
 
+/* Terang dan "sunk" sengaja tembus pandang supaya background utama (base.css) terlihat */
 .paper {
-  background: var(--paper);
+  background: transparent;
   color: var(--ink);
 }
 
 .sunk {
-  background: var(--paper-sunk);
+  background: color-mix(in srgb, var(--paper-sunk) 72%, transparent);
   color: var(--ink);
   --line: #c3d1ca;
 }

@@ -1,0 +1,47 @@
+diff --git a/src/components/ui/Section.module.css b/src/components/ui/Section.module.css
+index 110c89b..fe38229 100644
+--- a/src/components/ui/Section.module.css
++++ b/src/components/ui/Section.module.css
+@@ -3,13 +3,14 @@
+   scroll-margin-top: var(--header-h);
+ }
+ 
++/* Terang dan "sunk" sengaja tembus pandang supaya background utama (base.css) terlihat */
+ .paper {
+-  background: var(--paper);
++  background: transparent;
+   color: var(--ink);
+ }
+ 
+ .sunk {
+-  background: var(--paper-sunk);
++  background: color-mix(in srgb, var(--paper-sunk) 72%, transparent);
+   color: var(--ink);
+   --line: #c3d1ca;
+ }
+diff --git a/src/styles/base.css b/src/styles/base.css
+index 253ecf1..62318fb 100644
+--- a/src/styles/base.css
++++ b/src/styles/base.css
+@@ -27,6 +27,21 @@ body {
+   text-rendering: optimizeLegibility;
+ }
+ 
++/*
++  Background utama seluruh halaman.
++  PNG-nya transparan di tengah, jadi warna --paper di body tetap jadi dasarnya.
++  Dipasang sebagai layer fixed (bukan background-attachment: fixed) supaya tetap
++  mulus di iOS Safari. Lebar gambar selalu pas layar, menempel di bawah.
++*/
++body::before {
++  content: '';
++  position: fixed;
++  inset: 0;
++  z-index: -1;
++  pointer-events: none;
++  background: url('../components/asssets/BgKoscekMain.png') center bottom / 100% auto no-repeat;
++}
++
+ h1,
+ h2,
+ h3,
