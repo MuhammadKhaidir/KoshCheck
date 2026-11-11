@@ -29,6 +29,12 @@ export const nav = [
   { label: 'FAQ', href: '#faq' },
 ]
 
+/* Menu di header: ada "Beranda" berikon, "Masalah" tidak ditampilkan supaya muat. Footer tetap memakai `nav`. */
+export const headerNav = [
+  { label: 'Beranda', href: '#top', icon: 'home' },
+  ...nav.filter((item) => item.href !== '#masalah'),
+]
+
 /*
   Paket Check Kost.
   Rentang harga Rp39.000 sampai Rp99.000 berasal dari dokumen strategi KOSCHECK.
@@ -76,6 +82,12 @@ export const plans = {
 export const startingPrice = Math.min(...plans.items.map((p) => p.price))
 
 export const hero = {
+  badge: 'Survei Kos Modern & Terpercaya',
+  features: [
+    { icon: 'shield', text: 'Survei langsung ke lokasi' },
+    { icon: 'camera', text: 'Foto & video berkualitas' },
+    { icon: 'bolt', text: 'Laporan cepat dan akurat' },
+  ],
   lede: 'KOSCHECK memeriksa kos langsung ke lokasi, lalu mengirim foto, video, dan laporan kondisinya, sebelum kamu membayar sewa.',
   primaryCta: 'Pesan survei kos',
   secondaryCta: 'Lihat katalog gratis',
@@ -176,6 +188,7 @@ export const disclaimer =
 /* Teks widget chat AI. Prompt dan data yang dibaca AI ada di api/chat.js. */
 export const chat = {
   launcher: 'Tanya KOSCHECK',
+  bubble: ['Ada pertanyaan?', 'Kami siap membantu!'],
   title: 'Tanya KOSCHECK',
   subtitle: 'Asisten AI untuk soal kos dan survei',
   greeting: 'Halo, aku asisten KOSCHECK. Mau tanya soal katalog, paket survei, atau cara pesan?',

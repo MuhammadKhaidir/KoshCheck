@@ -16,13 +16,30 @@
   z-index: 1;
 }
 
+/* Percikan kuning dekoratif di pojok kanan atas, sejajar dengan tab */
+.spark {
+  position: absolute;
+  top: -0.25rem;
+  right: 0.25rem;
+  width: 2.6rem;
+  height: 2.6rem;
+  fill: none;
+  stroke: var(--marker-deep);
+  stroke-width: 3;
+  stroke-linecap: round;
+  pointer-events: none;
+}
+
 .tab {
   appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
   padding: 0.55rem 1rem;
   background: var(--paper-sunk);
   border: 1px solid var(--line);
   border-bottom: 0;
-  border-radius: var(--radius-s) var(--radius-s) 0 0;
+  border-radius: var(--radius-m) var(--radius-m) 0 0;
   color: var(--muted);
   font-size: var(--step--1);
   font-weight: 650;
@@ -33,9 +50,11 @@
   color: var(--ink);
 }
 
+/* Tab aktif berwarna hijau tua, menyatu dengan tepi atas lembar */
 .tab[aria-selected='true'] {
-  background: var(--white);
-  color: var(--ink);
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--paper);
 }
 
 .sheet {
@@ -43,7 +62,7 @@
   padding: 1.4rem 1.25rem 1.25rem;
   background: var(--white);
   border: 1px solid var(--line);
-  border-radius: 0 var(--radius-s) var(--radius-s) var(--radius-s);
+  border-radius: 0 var(--radius-m) var(--radius-m) var(--radius-m);
   box-shadow: var(--shadow-sheet);
 }
 
@@ -66,15 +85,33 @@
   text-align: right;
 }
 
+/* "Laporan survei" sebagai pil hijau muda berikon dokumen */
 .docLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem 0.8rem;
+  background: var(--ok-bg);
+  border: 1px solid color-mix(in srgb, var(--ok) 25%, transparent);
+  border-radius: var(--radius-pill);
   font-size: var(--step--1);
   font-weight: 700;
+}
+
+.docLabel + .meta {
+  margin-top: 0.5rem;
 }
 
 .meta {
   margin-top: 0.15rem;
   font-size: var(--step--1);
   color: var(--muted);
+}
+
+.place {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
 }
 
 .table {
@@ -142,11 +179,30 @@
   color: var(--bad);
 }
 
-/* Ruang di kanan untuk stempel */
+/* Kotak ringkasan: hijau muda bila lolos, merah muda bila belum. Ruang di kanan untuk stempel */
 .foot {
-  min-height: 5.5rem;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: start;
+  column-gap: var(--space-3);
+  min-height: 6rem;
   margin-top: var(--space-4);
-  padding-right: 7.5rem;
+  padding: var(--space-4) 7.75rem var(--space-4) var(--space-4);
+  background: var(--ok-bg);
+  border-radius: var(--radius-m);
+}
+
+.foot[data-verdict='rejected'] {
+  background: var(--bad-bg);
+}
+
+.infoIcon {
+  margin-top: 0.1rem;
+  color: var(--ok);
+}
+
+.foot[data-verdict='rejected'] .infoIcon {
+  color: var(--bad);
 }
 
 .summary {
@@ -234,7 +290,6 @@
   }
 
   .foot {
-    padding-right: 0;
-    padding-bottom: 6rem;
+    padding: var(--space-4) var(--space-4) 7rem;
   }
 }

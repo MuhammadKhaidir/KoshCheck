@@ -1,0 +1,38 @@
+diff --git a/src/components/chat/ChatWidget.module.css b/src/components/chat/ChatWidget.module.css
+index 734f71f..4e58676 100644
+--- a/src/components/chat/ChatWidget.module.css
++++ b/src/components/chat/ChatWidget.module.css
+@@ -61,7 +61,10 @@
+   font-weight: 650;
+   line-height: 1.1;
+   cursor: pointer;
+-  box-shadow: var(--shadow-sheet);
++  /* Cincin krem tipis supaya tombol tetap terlihat di atas footer yang gelap */
++  box-shadow:
++    0 0 0 2px var(--paper),
++    var(--shadow-sheet);
+   transition: background-color 0.15s ease;
+ }
+ 
+diff --git a/src/components/sections/Hero.module.css b/src/components/sections/Hero.module.css
+index 77706a4..e94b6b1 100644
+--- a/src/components/sections/Hero.module.css
++++ b/src/components/sections/Hero.module.css
+@@ -12,11 +12,15 @@
+   align-items: center;
+ }
+ 
+-/* Hiasan ombak di sudut kiri bawah, di belakang konten */
++/*
++  Hiasan ombak: menempel di sudut kiri bawah layar dan ikut layar saat di-scroll.
++  z-index 40 = di atas konten, di bawah header (50) dan tombol chat (60). Klik tetap tembus.
++*/
+ .wave {
+-  position: absolute;
++  position: fixed;
+   left: 0;
+   bottom: 0;
++  z-index: 40;
+   width: min(32vw, 30rem);
+   height: clamp(3.5rem, 8vw, 7rem);
+   pointer-events: none;

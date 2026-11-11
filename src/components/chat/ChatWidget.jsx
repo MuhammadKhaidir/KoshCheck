@@ -65,6 +65,11 @@ export default function ChatWidget() {
   if (!open) {
     return (
       <div className={s.root}>
+        {/* Gelembung sapaan: hiasan saja, tombol di bawahnya sudah berlabel */}
+        <p className={s.bubble} aria-hidden="true">
+          <span>{copy.bubble[0]}</span>
+          <span>{copy.bubble[1]}</span>
+        </p>
         <button
           ref={launcherRef}
           type="button"
@@ -72,8 +77,9 @@ export default function ChatWidget() {
           aria-haspopup="dialog"
           onClick={() => setOpen(true)}
         >
-          <Icon name="chat" />
+          <Icon name="headset" />
           {copy.launcher}
+          <Icon name="arrow" size={18} />
         </button>
       </div>
     )

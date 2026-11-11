@@ -3,6 +3,48 @@
   right: var(--space-4);
   bottom: var(--space-4);
   z-index: 60;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.75rem;
+}
+
+/* Gelembung sapaan di atas tombol, dengan ekor menunjuk ke tombol */
+.bubble {
+  position: relative;
+  display: grid;
+  margin-right: 0.5rem;
+  padding: 0.65rem 1rem;
+  background: var(--white);
+  border: 1px solid var(--line);
+  border-radius: 1rem;
+  box-shadow: var(--shadow-sheet);
+  color: var(--ink);
+  font-size: var(--step--1);
+  font-weight: 600;
+  line-height: 1.35;
+  text-align: center;
+  pointer-events: none;
+}
+
+.bubble::after {
+  content: '';
+  position: absolute;
+  right: 2.2rem;
+  bottom: -0.45rem;
+  width: 0.8rem;
+  height: 0.8rem;
+  background: var(--white);
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  transform: rotate(45deg);
+}
+
+/* Layar HP sempit: gelembung disembunyikan supaya tidak menutupi konten */
+@media (max-width: 30rem) {
+  .bubble {
+    display: none;
+  }
 }
 
 .launcher {
@@ -10,21 +52,24 @@
   align-items: center;
   gap: var(--space-2);
   min-height: 3rem;
-  padding: 0.85rem 1.2rem;
+  padding: 0.85rem 1.25rem;
   border: 2px solid var(--ink);
-  border-radius: var(--radius-m);
-  background: var(--marker);
-  color: var(--ink);
+  border-radius: var(--radius-pill);
+  background: var(--ink);
+  color: var(--paper);
   font-size: var(--step-0);
   font-weight: 650;
   line-height: 1.1;
   cursor: pointer;
-  box-shadow: var(--shadow-sheet);
+  /* Cincin krem tipis supaya tombol tetap terlihat di atas footer yang gelap */
+  box-shadow:
+    0 0 0 2px var(--paper),
+    var(--shadow-sheet);
   transition: background-color 0.15s ease;
 }
 
 .launcher:hover {
-  background: var(--marker-deep);
+  background: var(--ink-soft);
 }
 
 .panel {

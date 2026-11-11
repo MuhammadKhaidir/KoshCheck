@@ -35,6 +35,10 @@ export default function SurveyReport() {
 
   return (
     <figure className={s.wrap}>
+      {/* Percikan kuning dekoratif di pojok kanan atas */}
+      <svg className={s.spark} viewBox="0 0 40 40" aria-hidden="true">
+        <path d="M9 27 11 16M16 31l9-7M18 38l13-2" />
+      </svg>
       <div className={s.tabs} role="tablist" aria-label="Pilih contoh laporan" onKeyDown={onKeyDown}>
         {reports.map((r, i) => (
           <button
@@ -51,6 +55,7 @@ export default function SurveyReport() {
             className={s.tab}
             onClick={() => setActiveId(r.id)}
           >
+            <Icon name="home" size={16} />
             {r.tab}
           </button>
         ))}
@@ -65,10 +70,16 @@ export default function SurveyReport() {
         <div className={s.head}>
           <div>
             <h2 className={s.title}>{report.title}</h2>
-            <p className={s.meta}>{report.area}</p>
+            <p className={`${s.meta} ${s.place}`}>
+              <Icon name="pin" size={14} />
+              {report.area}
+            </p>
           </div>
           <div className={s.docInfo}>
-            <p className={s.docLabel}>Laporan survei</p>
+            <p className={s.docLabel}>
+              <Icon name="doc" size={14} />
+              Laporan survei
+            </p>
             <p className={s.meta}>Diperiksa {tanggal(report.checkedAt, true)}</p>
           </div>
         </div>
@@ -104,11 +115,14 @@ export default function SurveyReport() {
           </tbody>
         </table>
 
-        <div className={s.foot}>
-          <p className={s.summary}>
-            {counts.ok} sesuai, {counts.warn} beda, {counts.bad} tidak sesuai
-          </p>
-          <p className={s.note}>{report.note}</p>
+        <div className={s.foot} data-verdict={report.verdict}>
+          <Icon name="info" size={20} className={s.infoIcon} />
+          <div>
+            <p className={s.summary}>
+              {counts.ok} sesuai, {counts.warn} beda, {counts.bad} tidak sesuai
+            </p>
+            <p className={s.note}>{report.note}</p>
+          </div>
         </div>
 
         <Stamp variant={report.verdict} className={s.stamp} />

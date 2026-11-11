@@ -1,19 +1,29 @@
+/*
+  Header melayang: wrapper-nya transparan dan tidak menangkap klik,
+  yang tampak sebagai bar membulat hanya .bar.
+*/
 .header {
   position: sticky;
   top: 0;
   z-index: 50;
-  background: color-mix(in srgb, var(--paper) 90%, transparent);
-  -webkit-backdrop-filter: blur(10px);
-  backdrop-filter: blur(10px);
-  border-bottom: 1px solid var(--line);
+  padding: var(--space-3) var(--space-3) 0;
+  pointer-events: none;
 }
 
 .bar {
+  position: relative;
+  pointer-events: auto;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-5);
-  height: var(--header-h);
+  height: 4rem;
+  background: color-mix(in srgb, var(--white) 88%, transparent);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  border: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+  border-radius: 1.25rem;
+  box-shadow: var(--shadow-sheet);
 }
 
 .brand {
@@ -21,16 +31,18 @@
   text-decoration: none;
 }
 
-/* Mobile: menu turun sebagai panel di bawah header */
+/* Mobile: menu turun sebagai panel membulat di bawah bar */
 .nav {
   display: none;
   position: absolute;
-  top: 100%;
+  top: calc(100% + var(--space-2));
   left: 0;
   right: 0;
-  padding: var(--space-3) var(--gutter) var(--space-5);
-  background: var(--paper);
-  border-bottom: 1px solid var(--line);
+  padding: var(--space-2) var(--gutter) var(--space-4);
+  background: var(--white);
+  border: 1px solid var(--line);
+  border-radius: 1.25rem;
+  box-shadow: var(--shadow-sheet);
 }
 
 .nav.open {
@@ -43,11 +55,18 @@
 }
 
 .link {
-  display: block;
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
   padding: 0.85rem 0;
   border-bottom: 1px solid var(--line);
   font-weight: 600;
   text-decoration: none;
+}
+
+.link[aria-current='location'] {
+  font-weight: 750;
 }
 
 .mobileCta {
@@ -59,6 +78,12 @@
   display: flex;
   align-items: center;
   gap: var(--space-2);
+}
+
+/* Tombol pesan di header berbentuk pil */
+.bar .cta {
+  border-radius: var(--radius-pill);
+  padding-inline: 1.15rem;
 }
 
 .toggle {
@@ -91,6 +116,8 @@
     padding: 0;
     background: none;
     border: 0;
+    border-radius: 0;
+    box-shadow: none;
   }
 
   .list {
@@ -110,6 +137,23 @@
     text-decoration-color: var(--marker-deep);
     text-decoration-thickness: 3px;
     text-underline-offset: 6px;
+  }
+
+  /* Menu aktif: tebal dengan garis di bawahnya */
+  .link[aria-current='location'] {
+    font-weight: 700;
+    text-decoration: none;
+  }
+
+  .link[aria-current='location']::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: -0.3rem;
+    height: 3px;
+    border-radius: 2px;
+    background: var(--ink);
   }
 
   .toggle {
