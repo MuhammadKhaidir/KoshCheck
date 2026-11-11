@@ -20,10 +20,10 @@ index 110c89b..fe38229 100644
    --line: #c3d1ca;
  }
 diff --git a/src/styles/base.css b/src/styles/base.css
-index 253ecf1..62318fb 100644
+index 253ecf1..ce2dd6b 100644
 --- a/src/styles/base.css
 +++ b/src/styles/base.css
-@@ -27,6 +27,21 @@ body {
+@@ -27,6 +27,24 @@ body {
    text-rendering: optimizeLegibility;
  }
  
@@ -32,6 +32,8 @@ index 253ecf1..62318fb 100644
 +  PNG-nya transparan di tengah, jadi warna --paper di body tetap jadi dasarnya.
 +  Dipasang sebagai layer fixed (bukan background-attachment: fixed) supaya tetap
 +  mulus di iOS Safari. Lebar gambar selalu pas layar, menempel di bawah.
++  Opacity diturunkan supaya teks di atas gambar tetap jelas. Mau lebih pudar:
++  kecilkan angkanya. Mau lebih tegas: besarkan (maksimal 1).
 +*/
 +body::before {
 +  content: '';
@@ -39,6 +41,7 @@ index 253ecf1..62318fb 100644
 +  inset: 0;
 +  z-index: -1;
 +  pointer-events: none;
++  opacity: 0.5;
 +  background: url('../components/asssets/BgKoscekMain.png') center bottom / 100% auto no-repeat;
 +}
 +
