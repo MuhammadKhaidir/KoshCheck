@@ -1,0 +1,19 @@
+diff --git a/src/styles/base.css b/src/styles/base.css
+--- a/src/styles/base.css
++++ b/src/styles/base.css
+@@ -130,3 +130,15 @@
+ .skip-link:focus {
+   top: var(--space-3);
+ }
++
++/*
++  Pertegas seluruh teks halaman agar tetap terbaca di atas background.
++  Heading dan seluruh isi di dalam heading sengaja tidak disentuh.
++  Hanken Grotesk Variable mendukung bobot 600 (semibold).
++*/
++body :not(:is(
++  h1, h2, h3, h4, h5, h6,
++  h1 *, h2 *, h3 *, h4 *, h5 *, h6 *
++)) {
++  font-weight: 600 !important;
++}
