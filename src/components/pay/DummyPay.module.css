@@ -1,0 +1,163 @@
+.dialog {
+  width: min(26rem, calc(100vw - 2rem));
+  max-height: calc(100dvh - 2rem);
+  margin: auto;
+  padding: 0;
+  overflow: auto;
+  background: var(--white);
+  color: var(--ink);
+  border: 2px solid var(--ink);
+  border-radius: var(--radius-m);
+}
+
+.dialog::backdrop {
+  background: rgba(14, 47, 51, 0.65);
+}
+
+.banner {
+  padding: var(--space-2) var(--space-4);
+  background: var(--marker);
+  font-size: var(--step--1);
+  font-weight: 700;
+  text-align: center;
+}
+
+.body {
+  display: grid;
+  gap: var(--space-4);
+  padding: var(--space-5);
+}
+
+.title {
+  font-family: var(--font-display);
+  font-size: var(--step-2);
+  line-height: 1.1;
+}
+
+.summary {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  background: var(--paper);
+  border: 1px dashed var(--ink-soft);
+  border-radius: var(--radius-s);
+}
+
+.summary div {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--space-1) var(--space-3);
+}
+
+.summary dt {
+  color: var(--muted);
+  font-size: var(--step--1);
+}
+
+.summary dd {
+  margin: 0;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
+.total {
+  font-size: var(--step-1);
+}
+
+.methods {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.methods legend {
+  margin-bottom: var(--space-2);
+  padding: 0;
+  font-size: var(--step--1);
+  font-weight: 650;
+}
+
+.method {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius-s);
+  cursor: pointer;
+}
+
+.method:has(input:checked) {
+  background: var(--paper);
+  border-color: var(--ink);
+}
+
+.method:has(input:focus-visible) {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.method input {
+  flex: none;
+  accent-color: var(--ink);
+}
+
+.method span {
+  display: grid;
+}
+
+.method small {
+  color: var(--muted);
+}
+
+.detail {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius-s);
+  text-align: center;
+}
+
+.qr {
+  width: 9rem;
+  height: 9rem;
+}
+
+.detailLabel,
+.detailNote {
+  font-size: var(--step--1);
+  color: var(--muted);
+}
+
+.va {
+  font-family: var(--font-display);
+  font-size: var(--step-1);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.error {
+  padding: var(--space-3);
+  background: var(--bad-bg);
+  border-radius: var(--radius-s);
+  font-size: var(--step--1);
+  font-weight: 600;
+  color: var(--bad);
+}
+
+/* Tombol tetap terlihat di bawah dialog walau daftar metode panjang (layar pendek / HP) */
+.actions {
+  position: sticky;
+  bottom: 0;
+  display: grid;
+  gap: var(--space-3);
+  padding-block: var(--space-3);
+  background: var(--white);
+  border-top: 1px solid var(--line);
+}

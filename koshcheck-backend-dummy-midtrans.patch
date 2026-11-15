@@ -1,0 +1,1219 @@
+diff --git a/.env.example b/.env.example
+index af4463c..eb832ee 100644
+--- a/.env.example
++++ b/.env.example
+@@ -7,7 +7,15 @@ OPENROUTER_API_KEY=
+ # AI_MODEL=google/gemma-4-31b-it:free,google/gemma-4-26b-a4b-it:free,nvidia/nemotron-3.5-super-vl:free
+ # Kalau ada model :free, openrouter/free otomatis jadi cadangan terakhir.
+ 
++# Database pesanan dan pendaftaran kos (Postgres: Supabase, Neon, Vercel Postgres, dll).
++# Kosong di lokal = data disimpan ke file .data/koshcheck.json. Di Vercel wajib diisi.
++DATABASE_URL=
++# Kunci untuk melihat data lewat GET /api/admin (header x-admin-key). Isi bebas, buatan sendiri.
++ADMIN_KEY=
++
+ # Pembayaran (Midtrans). Ambil di dashboard Midtrans > Settings > Access Keys.
++# Selama dua key di bawah KOSONG, form memakai tampilan pembayaran dummy (simulasi, tanpa Midtrans).
++# Begitu MIDTRANS_SERVER_KEY diisi, endpoint simulasi /api/pay-dummy otomatis menolak semua permintaan.
+ # Biarkan MIDTRANS_IS_PRODUCTION=false selama uji coba (sandbox, tidak ada uang sungguhan).
+ MIDTRANS_SERVER_KEY=
+ MIDTRANS_CLIENT_KEY=
+diff --git a/.gitignore b/.gitignore
+index dce6e68..653d24b 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -1,5 +1,6 @@
+ node_modules
+ dist
++.data
+ .DS_Store
+ *.local
+ .env
+diff --git a/README.md b/README.md
+index 65256e0..69069f2 100644
+--- a/README.md
++++ b/README.md
+@@ -60,9 +60,28 @@ Widget chat di pojok kanan bawah. Pesan dikirim ke `api/chat.js` (Vercel Functio
+ 4. Pengetahuan AI diambil dari `content/site.js` dan `data/kos.js`, jadi ikut berubah saat kontennya diubah. Aturan jawabannya ada di `SYSTEM` pada `api/chat.js`.
+ 5. Teks widget (sapaan, pertanyaan contoh) ada di `content/site.js`, export `chat`.
+ 
++## Backend dan database
++
++Pesanan survei dan pendaftaran kos masuk ke database lewat Vercel Functions di `api/`:
++
++| Endpoint | Fungsi |
++| --- | --- |
++| `POST /api/orders` | Simpan pesanan survei (status `pending`). Harga diambil server dari `plans`, bukan dari browser. |
++| `POST /api/pay-dummy` | Pembayaran simulasi: ubah status pesanan jadi `paid` atau `failed`. |
++| `POST /api/listings` | Simpan pendaftaran kos dari pemilik (status `baru`). |
++| `GET /api/admin` | Lihat semua pesanan dan pendaftaran. Wajib header `x-admin-key`. |
++
++1. **Lokal tanpa setup**: biarkan `DATABASE_URL` kosong. Data disimpan di `.data/koshcheck.json` (tidak ikut di-commit).
++2. **Postgres (wajib di Vercel)**: buat database gratis di Supabase atau Neon, salin connection string ke `DATABASE_URL`. Tabel `orders` dan `listings` dibuat otomatis saat pertama dipakai.
++3. **Lihat data**: isi `ADMIN_KEY` (bebas, buatan sendiri), lalu `curl -H "x-admin-key: KUNCIMU" http://localhost:5173/api/admin`.
++
++File terkait: `api/_db.js` (penyimpanan, Postgres atau file JSON), `api/orders.js`, `api/listings.js`, `api/admin.js`.
++
+ ## Pembayaran (Midtrans)
+ 
+-Form pesan survei membuka jendela pembayaran Midtrans Snap di halaman yang sama (QRIS, transfer bank, e-wallet, dan metode lain yang diaktifkan di akun Midtrans). Harga selalu diambil server dari `plans` di `content/site.js`, bukan dari browser.
++**Status sekarang: tampilan dummy.** Tombol Bayar membuka dialog bergaya Midtrans (`src/components/pay/DummyPay.jsx`) yang hanya mengubah status pesanan di database lewat `api/pay-dummy.js`. Tidak ada panggilan ke Midtrans dan tidak ada uang yang berpindah. Begitu `MIDTRANS_SERVER_KEY` diisi, `api/pay-dummy.js` otomatis menolak semua permintaan. Untuk beralih ke Midtrans asli, di `Order.jsx` ganti `<DummyPay>` dengan alur `payWithSnap()` (lihat langkah di bawah), dan isi `onPaid()` di `api/pay-notify.js` untuk menandai pesanan lunas di database.
++
++Alur Midtrans asli (belum dipakai form saat ini): `api/pay.js` membuat transaksi dan `src/lib/snap.js` membuka jendela pembayaran Midtrans Snap (QRIS, transfer bank, e-wallet, dan metode lain yang diaktifkan di akun Midtrans). Harga selalu diambil server dari `plans` di `content/site.js`, bukan dari browser.
+ 
+ 1. Daftar di Midtrans, buka mode **Sandbox**, ambil Server Key dan Client Key (Settings > Access Keys).
+ 2. Isi `MIDTRANS_SERVER_KEY` dan `MIDTRANS_CLIENT_KEY` di `.env.local` (lihat `.env.example`), restart `npm run dev`. Di Vercel: Project Settings > Environment Variables, lalu redeploy.
+diff --git a/api/_db.js b/api/_db.js
+new file mode 100644
+index 0000000..8bdf099
+--- /dev/null
++++ b/api/_db.js
+@@ -0,0 +1,182 @@
++/*
++  Penyimpanan data: pesanan survei dan pendaftaran kos.
++  File berawalan "_" tidak dianggap endpoint oleh Vercel, jadi aman dipakai bersama oleh api/*.js.
++
++  Env:
++    DATABASE_URL  Connection string Postgres (Supabase, Neon, Vercel Postgres, dll).
++                  Tabel dibuat otomatis saat pertama dipakai, tidak perlu migrasi manual.
++    Kosong di lokal  -> data disimpan di file .data/koshcheck.json (cukup untuk dev, tidak perlu setup).
++    Kosong di Vercel -> error, karena disk Vercel tidak permanen.
++*/
++import { randomBytes } from 'node:crypto'
++import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
++import path from 'node:path'
++
++/** newId('KC') -> "KC-MH3X9A2B-1F2E3D" */
++export const newId = (prefix) => `${prefix}-${Date.now().toString(36)}-${randomBytes(3).toString('hex')}`.toUpperCase()
++
++const usePostgres = (env) => Boolean(env.DATABASE_URL)
++
++/* ---------- Postgres ---------- */
++
++function getSql(env) {
++  const g = globalThis // dipakai ulang antar-request (dan antar-reload di npm run dev)
++  if (g.__koshDb?.url !== env.DATABASE_URL) {
++    const ready = (async () => {
++      const { default: postgres } = await import('postgres')
++      const sql = postgres(env.DATABASE_URL, { max: 1, idle_timeout: 5, connect_timeout: 10 })
++      await sql`
++        create table if not exists orders (
++          id         text primary key,
++          nama       text not null,
++          whatsapp   text not null,
++          kos        text not null,
++          paket      text not null,
++          harga      integer not null,
++          catatan    text not null default '',
++          status     text not null default 'pending',
++          metode     text,
++          created_at timestamptz not null default now(),
++          paid_at    timestamptz
++        )`
++      await sql`
++        create table if not exists listings (
++          id         text primary key,
++          nama       text not null,
++          whatsapp   text not null,
++          kos        text not null,
++          area       text not null,
++          catatan    text not null default '',
++          status     text not null default 'baru',
++          created_at timestamptz not null default now()
++        )`
++      return sql
++    })()
++    g.__koshDb = { url: env.DATABASE_URL, ready }
++    ready.catch(() => {
++      if (g.__koshDb?.ready === ready) g.__koshDb = null // coba sambung lagi di request berikutnya
++    })
++  }
++  return g.__koshDb.ready
++}
++
++/* ---------- File JSON (khusus dev lokal) ---------- */
++
++const FILE = path.resolve('.data', 'koshcheck.json')
++
++function assertFileAllowed(env) {
++  if (env.VERCEL) throw new Error('DATABASE_URL belum diisi. Di Vercel, data tidak bisa disimpan ke file.')
++}
++
++async function readJson() {
++  try {
++    const db = JSON.parse(await readFile(FILE, 'utf8'))
++    return { orders: db.orders ?? [], listings: db.listings ?? [] }
++  } catch (err) {
++    if (err.code === 'ENOENT') return { orders: [], listings: [] }
++    throw err // file rusak: jangan ditimpa diam-diam
++  }
++}
++
++async function writeJson(db) {
++  await mkdir(path.dirname(FILE), { recursive: true })
++  const tmp = `${FILE}.tmp`
++  await writeFile(tmp, JSON.stringify(db, null, 2))
++  await rename(tmp, FILE)
++}
++
++/** Baca-ubah-tulis berurutan supaya dua request bersamaan tidak saling menimpa. */
++function updateJson(fn) {
++  const g = globalThis
++  const run = async () => {
++    const db = await readJson()
++    const out = await fn(db)
++    await writeJson(db)
++    return out
++  }
++  const next = (g.__koshQueue ?? Promise.resolve()).then(run, run)
++  g.__koshQueue = next.catch(() => {})
++  return next
++}
++
++/* ---------- API yang dipakai endpoint ---------- */
++
++export async function insertOrder(env, o) {
++  if (!usePostgres(env)) {
++    assertFileAllowed(env)
++    return updateJson((db) => {
++      const row = { ...o, status: 'pending', metode: null, created_at: new Date().toISOString(), paid_at: null }
++      db.orders.push(row)
++      return row
++    })
++  }
++  const sql = await getSql(env)
++  const [row] = await sql`
++    insert into orders (id, nama, whatsapp, kos, paket, harga, catatan)
++    values (${o.id}, ${o.nama}, ${o.whatsapp}, ${o.kos}, ${o.paket}, ${o.harga}, ${o.catatan})
++    returning *`
++  return row
++}
++
++export async function getOrder(env, id) {
++  if (!usePostgres(env)) {
++    assertFileAllowed(env)
++    return (await readJson()).orders.find((o) => o.id === id) ?? null
++  }
++  const sql = await getSql(env)
++  const [row] = await sql`select * from orders where id = ${id}`
++  return row ?? null
++}
++
++/** status: 'pending' | 'paid' | 'failed'. Mengembalikan baris terbaru, atau null bila id tidak ada. */
++export async function setOrderStatus(env, id, status, metode) {
++  const paidAt = status === 'paid' ? new Date() : null
++  if (!usePostgres(env)) {
++    assertFileAllowed(env)
++    return updateJson((db) => {
++      const row = db.orders.find((o) => o.id === id)
++      if (!row) return null
++      Object.assign(row, { status, metode: metode ?? null, paid_at: paidAt?.toISOString() ?? null })
++      return row
++    })
++  }
++  const sql = await getSql(env)
++  const [row] = await sql`
++    update orders set status = ${status}, metode = ${metode ?? null}, paid_at = ${paidAt}
++    where id = ${id}
++    returning *`
++  return row ?? null
++}
++
++export async function insertListing(env, l) {
++  if (!usePostgres(env)) {
++    assertFileAllowed(env)
++    return updateJson((db) => {
++      const row = { ...l, status: 'baru', created_at: new Date().toISOString() }
++      db.listings.push(row)
++      return row
++    })
++  }
++  const sql = await getSql(env)
++  const [row] = await sql`
++    insert into listings (id, nama, whatsapp, kos, area, catatan)
++    values (${l.id}, ${l.nama}, ${l.whatsapp}, ${l.kos}, ${l.area}, ${l.catatan})
++    returning *`
++  return row
++}
++
++/** Data terbaru di atas, maksimal 500 baris per tabel. */
++export async function listAll(env) {
++  if (!usePostgres(env)) {
++    assertFileAllowed(env)
++    const db = await readJson()
++    const newest = (rows) => [...rows].reverse().slice(0, 500)
++    return { orders: newest(db.orders), listings: newest(db.listings) }
++  }
++  const sql = await getSql(env)
++  const [orders, listings] = await Promise.all([
++    sql`select * from orders order by created_at desc limit 500`,
++    sql`select * from listings order by created_at desc limit 500`,
++  ])
++  return { orders, listings }
++}
+diff --git a/api/admin.js b/api/admin.js
+new file mode 100644
+index 0000000..2ca63b6
+--- /dev/null
++++ b/api/admin.js
+@@ -0,0 +1,38 @@
++/*
++  Daftar pesanan dan pendaftaran kos untuk tim (Vercel Serverless Function).
++  Dilindungi kunci: kirim header  x-admin-key: <ADMIN_KEY>.
++
++  Env:
++    ADMIN_KEY  kunci rahasia buatanmu sendiri (bebas, panjang lebih aman). Kosong = endpoint nonaktif.
++
++  Contoh:
++    curl -H "x-admin-key: KUNCIMU" http://localhost:5173/api/admin
++    -> { orders: [...], listings: [...] }   (terbaru di atas)
++*/
++import { timingSafeEqual } from 'node:crypto'
++import { listAll } from './_db.js'
++
++function sameKey(given, expected) {
++  const a = Buffer.from(typeof given === 'string' ? given : '')
++  const b = Buffer.from(expected)
++  return a.length === b.length && timingSafeEqual(a, b)
++}
++
++export async function listData(_body, env, req) {
++  if (!env.ADMIN_KEY) return { status: 503, data: { error: 'ADMIN_KEY belum diisi.' } }
++  if (!sameKey(req?.headers?.['x-admin-key'], env.ADMIN_KEY)) {
++    return { status: 401, data: { error: 'Kunci admin salah.' } }
++  }
++  try {
++    return { status: 200, data: await listAll(env) }
++  } catch (err) {
++    console.error('[admin]', err)
++    return { status: 500, data: { error: 'Data belum bisa dibaca.' } }
++  }
++}
++
++export default async function handler(req, res) {
++  if (req.method !== 'GET') return res.status(405).json({ error: 'Gunakan GET.' })
++  const { status, data } = await listData(null, process.env, req)
++  res.status(status).json(data)
++}
+diff --git a/api/listings.js b/api/listings.js
+new file mode 100644
+index 0000000..9a7d6f6
+--- /dev/null
++++ b/api/listings.js
+@@ -0,0 +1,36 @@
++/*
++  Endpoint pendaftaran kos oleh pemilik (Vercel Serverless Function).
++  Menyimpan pendaftaran ke database dengan status 'baru' untuk ditinjau tim KOSCHECK.
++
++  POST /api/listings  { nama, whatsapp, kos, area, catatan }
++    -> 201 { listingId }
++*/
++import { insertListing, newId } from './_db.js'
++
++const clip = (value, max) => (typeof value === 'string' ? value.trim().slice(0, max) : '')
++
++export async function createListing(body, env) {
++  const nama = clip(body?.nama, 60)
++  const kos = clip(body?.kos, 100)
++  const area = clip(body?.area, 150)
++  const catatan = clip(body?.catatan, 300)
++  const whatsapp = clip(body?.whatsapp, 20).replace(/[^\d+]/g, '')
++
++  if (!nama || !kos || !area) return { status: 400, data: { error: 'Nama, nama kos, dan area wajib diisi.' } }
++  if (whatsapp.replace(/\D/g, '').length < 8) return { status: 400, data: { error: 'Nomor WhatsApp belum benar.' } }
++
++  const id = newId('KL')
++  try {
++    await insertListing(env, { id, nama, whatsapp, kos, area, catatan })
++  } catch (err) {
++    console.error('[listings]', err)
++    return { status: 500, data: { error: 'Pendaftaran belum bisa disimpan. Coba lagi sebentar.' } }
++  }
++  return { status: 201, data: { listingId: id } }
++}
++
++export default async function handler(req, res) {
++  if (req.method !== 'POST') return res.status(405).json({ error: 'Gunakan POST.' })
++  const { status, data } = await createListing(req.body, process.env)
++  res.status(status).json(data)
++}
+diff --git a/api/orders.js b/api/orders.js
+new file mode 100644
+index 0000000..ed7ca67
+--- /dev/null
++++ b/api/orders.js
+@@ -0,0 +1,39 @@
++/*
++  Endpoint pesanan survei (Vercel Serverless Function).
++  Menyimpan pesanan ke database dengan status 'pending'. Pembayarannya menyusul (sekarang: simulasi,
++  lihat api/pay-dummy.js). Harga TIDAK diambil dari browser, hanya id paket yang dicari di content/site.js.
++
++  POST /api/orders  { nama, whatsapp, kos, paket, catatan }
++    -> 201 { orderId, amount, planName }
++*/
++import { plans } from '../src/content/site.js'
++import { insertOrder, newId } from './_db.js'
++
++const clip = (value, max) => (typeof value === 'string' ? value.trim().slice(0, max) : '')
++
++export async function createOrder(body, env) {
++  const plan = plans.items.find((p) => p.id === body?.paket)
++  const nama = clip(body?.nama, 60)
++  const kos = clip(body?.kos, 200)
++  const catatan = clip(body?.catatan, 200)
++  const whatsapp = clip(body?.whatsapp, 20).replace(/[^\d+]/g, '')
++
++  if (!plan) return { status: 400, data: { error: 'Paket tidak dikenal.' } }
++  if (!nama || !kos) return { status: 400, data: { error: 'Nama dan kos wajib diisi.' } }
++  if (whatsapp.replace(/\D/g, '').length < 8) return { status: 400, data: { error: 'Nomor WhatsApp belum benar.' } }
++
++  const id = newId('KC')
++  try {
++    await insertOrder(env, { id, nama, whatsapp, kos, paket: plan.id, harga: plan.price, catatan })
++  } catch (err) {
++    console.error('[orders]', err)
++    return { status: 500, data: { error: 'Pesanan belum bisa disimpan. Coba lagi sebentar.' } }
++  }
++  return { status: 201, data: { orderId: id, amount: plan.price, planName: plan.name } }
++}
++
++export default async function handler(req, res) {
++  if (req.method !== 'POST') return res.status(405).json({ error: 'Gunakan POST.' })
++  const { status, data } = await createOrder(req.body, process.env)
++  res.status(status).json(data)
++}
+diff --git a/api/pay-dummy.js b/api/pay-dummy.js
+new file mode 100644
+index 0000000..8c64f2b
+--- /dev/null
++++ b/api/pay-dummy.js
+@@ -0,0 +1,46 @@
++/*
++  Pembayaran SIMULASI (pengganti sementara Midtrans). Dipanggil oleh tampilan dummy di
++  src/components/pay/DummyPay.jsx. Tidak ada uang dan tidak ada panggilan ke Midtrans.
++
++  POST /api/pay-dummy  { orderId, hasil: 'paid' | 'failed' | 'pending', metode }
++    -> 200 { orderId, status }
++
++  Pengaman: begitu MIDTRANS_SERVER_KEY diisi (Midtrans asli aktif), endpoint ini menolak semua
++  permintaan, supaya tidak ada yang bisa menandai pesanan "lunas" tanpa membayar.
++*/
++import { getOrder, setOrderStatus } from './_db.js'
++
++const HASIL = ['paid', 'failed', 'pending']
++const clip = (value, max) => (typeof value === 'string' ? value.trim().slice(0, max) : '')
++
++export async function dummyPay(body, env) {
++  if (env.MIDTRANS_SERVER_KEY) {
++    return { status: 403, data: { error: 'Simulasi pembayaran dimatikan karena Midtrans asli sudah aktif.' } }
++  }
++  const orderId = clip(body?.orderId, 60)
++  const hasil = body?.hasil
++  const metode = clip(body?.metode, 30) || null
++  if (!orderId || !HASIL.includes(hasil)) return { status: 400, data: { error: 'Data simulasi tidak lengkap.' } }
++
++  try {
++    const order = await getOrder(env, orderId)
++    if (!order) return { status: 404, data: { error: 'Pesanan tidak ditemukan.' } }
++    if (order.status === 'paid') {
++      // Sudah lunas: ulangan 'paid' dianggap sukses, selain itu ditolak (status lunas tidak boleh turun).
++      return hasil === 'paid'
++        ? { status: 200, data: { orderId, status: 'paid' } }
++        : { status: 409, data: { error: 'Pesanan ini sudah lunas.' } }
++    }
++    const row = await setOrderStatus(env, orderId, hasil, metode)
++    return { status: 200, data: { orderId, status: row.status } }
++  } catch (err) {
++    console.error('[pay-dummy]', err)
++    return { status: 500, data: { error: 'Status pembayaran belum bisa disimpan. Coba lagi sebentar.' } }
++  }
++}
++
++export default async function handler(req, res) {
++  if (req.method !== 'POST') return res.status(405).json({ error: 'Gunakan POST.' })
++  const { status, data } = await dummyPay(req.body, process.env)
++  res.status(status).json(data)
++}
+diff --git a/package-lock.json b/package-lock.json
+index a99263e..aaf0166 100644
+--- a/package-lock.json
++++ b/package-lock.json
+@@ -10,6 +10,7 @@
+       "dependencies": {
+         "@fontsource-variable/bricolage-grotesque": "^5.3.0",
+         "@fontsource-variable/hanken-grotesk": "^5.3.0",
++        "postgres": "^4.1.1",
+         "react": "^19.3.0",
+         "react-dom": "^19.3.0"
+       },
+@@ -710,6 +711,19 @@
+         "node": "^10 || ^12 || >=14"
+       }
+     },
++    "node_modules/postgres": {
++      "version": "4.1.1",
++      "resolved": "https://registry.npmjs.org/postgres/-/postgres-4.1.1.tgz",
++      "integrity": "sha512-1kJDojqNZC+iTHHXh6eif0J98LUtyLAePe/qkW1GK35eh2JixlsAiIKq3FGI+xqI+SUGTNodzf7TScVeIIyUug==",
++      "license": "Unlicense",
++      "engines": {
++        "node": ">=18"
++      },
++      "funding": {
++        "type": "individual",
++        "url": "https://github.com/sponsors/porsager"
++      }
++    },
+     "node_modules/react": {
+       "version": "19.3.0",
+       "resolved": "https://registry.npmjs.org/react/-/react-19.3.0.tgz",
+diff --git a/package.json b/package.json
+index 5983f16..6cfd606 100644
+--- a/package.json
++++ b/package.json
+@@ -12,6 +12,7 @@
+   "dependencies": {
+     "@fontsource-variable/bricolage-grotesque": "^5.3.0",
+     "@fontsource-variable/hanken-grotesk": "^5.3.0",
++    "postgres": "^4.1.1",
+     "react": "^19.3.0",
+     "react-dom": "^19.3.0"
+   },
+diff --git a/src/components/pay/DummyPay.jsx b/src/components/pay/DummyPay.jsx
+new file mode 100644
+index 0000000..1e7b391
+--- /dev/null
++++ b/src/components/pay/DummyPay.jsx
+@@ -0,0 +1,197 @@
++import { useEffect, useId, useRef, useState } from 'react'
++import Button from '../ui/Button.jsx'
++import { rupiah } from '../../lib/format.js'
++import s from './DummyPay.module.css'
++
++/*
++  TAMPILAN DUMMY pembayaran bergaya Midtrans. Tidak terhubung ke Midtrans sama sekali.
++  Tombol "Simulasikan" memanggil /api/pay-dummy, yang hanya mengubah status pesanan di database.
++
++  Nanti, saat akun Midtrans siap: di Order.jsx ganti <DummyPay> dengan alur payWithSnap()
++  (src/lib/snap.js + /api/pay), lalu isi MIDTRANS_SERVER_KEY. Endpoint dummy otomatis mati.
++
++  order   : { orderId, amount, planName }
++  onFinish(hasil)  hasil = 'paid' | 'failed', dipanggil setelah status tersimpan di server
++  onClose()        pengguna menutup tanpa menyelesaikan pembayaran
++*/
++const METHODS = [
++  { id: 'qris', label: 'QRIS', note: 'Semua e-wallet dan m-banking' },
++  { id: 'bca_va', label: 'BCA Virtual Account', note: 'ATM, m-banking, atau internet banking' },
++  { id: 'gopay', label: 'GoPay', note: 'Bayar lewat aplikasi' },
++  { id: 'shopeepay', label: 'ShopeePay', note: 'Bayar lewat aplikasi' },
++  { id: 'indomaret', label: 'Indomaret', note: 'Bayar tunai di kasir' },
++]
++
++/** Angka tetap dari id pesanan, supaya tidak berubah tiap render. */
++function seedOf(text) {
++  return [...text].reduce((acc, ch) => (acc * 33 + ch.charCodeAt(0)) >>> 0, 5381)
++}
++
++function fakeVa(orderId) {
++  const digits = String(seedOf(orderId)).padStart(12, '0')
++  return `8077${digits}`.replace(/(\d{4})(?=\d)/g, '$1 ')
++}
++
++/** Pola kotak-kotak mirip QR. Tidak bisa dipindai. */
++function FakeQr({ seed }) {
++  const size = 21
++  let x = seedOf(seed)
++  const cells = []
++  for (let r = 0; r < size; r++) {
++    for (let c = 0; c < size; c++) {
++      const inFinder = (r < 7 && c < 7) || (r < 7 && c >= size - 7) || (r >= size - 7 && c < 7)
++      x = (x * 1664525 + 1013904223) >>> 0
++      if (!inFinder && x & 0x10000) cells.push(<rect key={`${r}-${c}`} x={c} y={r} width="1" height="1" />)
++    }
++  }
++  const finders = [
++    [0, 0],
++    [size - 7, 0],
++    [0, size - 7],
++  ]
++  return (
++    <svg className={s.qr} viewBox={`-1 -1 ${size + 2} ${size + 2}`} role="img" aria-label="Contoh kode QR, tidak bisa dipindai">
++      <rect x="-1" y="-1" width={size + 2} height={size + 2} fill="#fff" />
++      <g fill="#0e2f33">
++        {cells}
++        {finders.map(([fx, fy]) => (
++          <g key={`${fx}-${fy}`}>
++            <rect x={fx} y={fy} width="7" height="7" />
++            <rect x={fx + 1} y={fy + 1} width="5" height="5" fill="#fff" />
++            <rect x={fx + 2} y={fy + 2} width="3" height="3" />
++          </g>
++        ))}
++      </g>
++    </svg>
++  )
++}
++
++function Detail({ method, orderId }) {
++  if (method.id === 'qris') {
++    return (
++      <>
++        <FakeQr seed={orderId} />
++        <p className={s.detailNote}>Kode QR contoh, tidak bisa dipindai.</p>
++      </>
++    )
++  }
++  if (method.id === 'bca_va') {
++    return (
++      <>
++        <p className={s.detailLabel}>Nomor Virtual Account (contoh)</p>
++        <p className={s.va}>{fakeVa(orderId)}</p>
++      </>
++    )
++  }
++  if (method.id === 'indomaret') {
++    return (
++      <>
++        <p className={s.detailLabel}>Kode pembayaran (contoh)</p>
++        <p className={s.va}>{`KC${seedOf(orderId) % 10_000_000}`}</p>
++      </>
++    )
++  }
++  return <p className={s.detailNote}>Di pembayaran asli, kamu diarahkan ke aplikasi {method.label}.</p>
++}
++
++export default function DummyPay({ order, onFinish, onClose }) {
++  const titleId = useId()
++  const radioName = useId()
++  const dialogRef = useRef(null)
++  const [methodId, setMethodId] = useState('')
++  const [busy, setBusy] = useState(false)
++  const [error, setError] = useState('')
++  const method = METHODS.find((m) => m.id === methodId)
++
++  useEffect(() => {
++    const dialog = dialogRef.current
++    dialog.showModal()
++    return () => dialog.close()
++  }, [])
++
++  async function simulate(hasil) {
++    setBusy(true)
++    setError('')
++    try {
++      const res = await fetch('/api/pay-dummy', {
++        method: 'POST',
++        headers: { 'content-type': 'application/json' },
++        body: JSON.stringify({ orderId: order.orderId, hasil, metode: method.id }),
++      })
++      const data = await res.json().catch(() => ({}))
++      if (!res.ok) throw new Error(data.error || 'Simulasi pembayaran gagal diproses. Coba lagi.')
++      onFinish(hasil)
++    } catch (err) {
++      setError(err.message)
++      setBusy(false)
++    }
++  }
++
++  return (
++    <dialog
++      ref={dialogRef}
++      className={s.dialog}
++      aria-labelledby={titleId}
++      onCancel={(event) => {
++        event.preventDefault() // Esc
++        if (!busy) onClose()
++      }}
++    >
++      <p className={s.banner}>Simulasi. Bukan Midtrans asli, tidak ada uang yang berpindah.</p>
++
++      <div className={s.body}>
++        <h2 id={titleId} className={s.title}>
++          Pembayaran
++        </h2>
++
++        <dl className={s.summary}>
++          <div>
++            <dt>Nomor pesanan</dt>
++            <dd>{order.orderId}</dd>
++          </div>
++          <div>
++            <dt>Survei {order.planName}</dt>
++            <dd className={s.total}>{rupiah(order.amount)}</dd>
++          </div>
++        </dl>
++
++        <fieldset className={s.methods} disabled={busy}>
++          <legend>Pilih metode pembayaran</legend>
++          {METHODS.map((m) => (
++            <label key={m.id} className={s.method}>
++              <input type="radio" name={radioName} value={m.id} checked={methodId === m.id} onChange={() => setMethodId(m.id)} />
++              <span>
++                <strong>{m.label}</strong>
++                <small>{m.note}</small>
++              </span>
++            </label>
++          ))}
++        </fieldset>
++
++        {method && (
++          <div className={s.detail} aria-live="polite">
++            <Detail method={method} orderId={order.orderId} />
++          </div>
++        )}
++
++        {error && (
++          <p className={s.error} role="alert">
++            {error}
++          </p>
++        )}
++
++        <div className={s.actions}>
++          <Button as="button" disabled={!method || busy} onClick={() => simulate('paid')}>
++            {busy ? 'Memproses' : 'Simulasikan: sudah bayar'}
++          </Button>
++          <Button as="button" variant="secondary" disabled={!method || busy} onClick={() => simulate('failed')}>
++            Simulasikan: gagal
++          </Button>
++          <Button as="button" variant="secondary" size="sm" disabled={busy} onClick={onClose}>
++            Tutup
++          </Button>
++        </div>
++      </div>
++    </dialog>
++  )
++}
+diff --git a/src/components/pay/DummyPay.module.css b/src/components/pay/DummyPay.module.css
+new file mode 100644
+index 0000000..303a7af
+--- /dev/null
++++ b/src/components/pay/DummyPay.module.css
+@@ -0,0 +1,163 @@
++.dialog {
++  width: min(26rem, calc(100vw - 2rem));
++  max-height: calc(100dvh - 2rem);
++  margin: auto;
++  padding: 0;
++  overflow: auto;
++  background: var(--white);
++  color: var(--ink);
++  border: 2px solid var(--ink);
++  border-radius: var(--radius-m);
++}
++
++.dialog::backdrop {
++  background: rgba(14, 47, 51, 0.65);
++}
++
++.banner {
++  padding: var(--space-2) var(--space-4);
++  background: var(--marker);
++  font-size: var(--step--1);
++  font-weight: 700;
++  text-align: center;
++}
++
++.body {
++  display: grid;
++  gap: var(--space-4);
++  padding: var(--space-5);
++}
++
++.title {
++  font-family: var(--font-display);
++  font-size: var(--step-2);
++  line-height: 1.1;
++}
++
++.summary {
++  display: grid;
++  gap: var(--space-2);
++  padding: var(--space-4);
++  background: var(--paper);
++  border: 1px dashed var(--ink-soft);
++  border-radius: var(--radius-s);
++}
++
++.summary div {
++  display: flex;
++  flex-wrap: wrap;
++  justify-content: space-between;
++  gap: var(--space-1) var(--space-3);
++}
++
++.summary dt {
++  color: var(--muted);
++  font-size: var(--step--1);
++}
++
++.summary dd {
++  margin: 0;
++  font-weight: 650;
++  overflow-wrap: anywhere;
++}
++
++.total {
++  font-size: var(--step-1);
++}
++
++.methods {
++  display: grid;
++  gap: var(--space-2);
++  min-width: 0;
++  margin: 0;
++  padding: 0;
++  border: 0;
++}
++
++.methods legend {
++  margin-bottom: var(--space-2);
++  padding: 0;
++  font-size: var(--step--1);
++  font-weight: 650;
++}
++
++.method {
++  display: flex;
++  align-items: center;
++  gap: var(--space-3);
++  padding: var(--space-3);
++  border: 1.5px solid var(--line);
++  border-radius: var(--radius-s);
++  cursor: pointer;
++}
++
++.method:has(input:checked) {
++  background: var(--paper);
++  border-color: var(--ink);
++}
++
++.method:has(input:focus-visible) {
++  outline: 2px solid var(--focus);
++  outline-offset: 2px;
++}
++
++.method input {
++  flex: none;
++  accent-color: var(--ink);
++}
++
++.method span {
++  display: grid;
++}
++
++.method small {
++  color: var(--muted);
++}
++
++.detail {
++  display: grid;
++  justify-items: center;
++  gap: var(--space-2);
++  padding: var(--space-4);
++  border: 1.5px solid var(--line);
++  border-radius: var(--radius-s);
++  text-align: center;
++}
++
++.qr {
++  width: 9rem;
++  height: 9rem;
++}
++
++.detailLabel,
++.detailNote {
++  font-size: var(--step--1);
++  color: var(--muted);
++}
++
++.va {
++  font-family: var(--font-display);
++  font-size: var(--step-1);
++  font-weight: 700;
++  letter-spacing: 0.04em;
++}
++
++.error {
++  padding: var(--space-3);
++  background: var(--bad-bg);
++  border-radius: var(--radius-s);
++  font-size: var(--step--1);
++  font-weight: 600;
++  color: var(--bad);
++}
++
++/* Tombol tetap terlihat di bawah dialog walau daftar metode panjang (layar pendek / HP) */
++.actions {
++  position: sticky;
++  bottom: 0;
++  display: grid;
++  gap: var(--space-3);
++  padding-block: var(--space-3);
++  background: var(--white);
++  border-top: 1px solid var(--line);
++}
+diff --git a/src/components/sections/Order.jsx b/src/components/sections/Order.jsx
+index 9e9a611..348d9e0 100644
+--- a/src/components/sections/Order.jsx
++++ b/src/components/sections/Order.jsx
+@@ -2,10 +2,10 @@ import { useEffect, useId, useState } from 'react'
+ import Section from '../ui/Section.jsx'
+ import SectionHead from '../ui/SectionHead.jsx'
+ import Button from '../ui/Button.jsx'
++import DummyPay from '../pay/DummyPay.jsx'
+ import { useOrderIntent } from '../../context/OrderIntent.jsx'
+ import { order, plans, contact, brand } from '../../content/site.js'
+ import { rupiah } from '../../lib/format.js'
+-import { payWithSnap } from '../../lib/snap.js'
+ import s from './Order.module.css'
+ 
+ const MODES = [
+@@ -15,25 +15,36 @@ const MODES = [
+ 
+ const initialForms = {
+   survei: { nama: '', whatsapp: '', kos: '', paket: plans.items[0].id, catatan: '' },
+-  pemilik: { nama: '', kos: '', area: '', catatan: '' },
++  pemilik: { nama: '', whatsapp: '', kos: '', area: '', catatan: '' },
+ }
+ 
+-/** Susun teks pesan yang dikirim ke tim KOSCHECK. Ubah template di sini. */
+-function composeMessage(mode, f) {
++const PAY_MESSAGE = {
++  paid: 'Pembayaran berhasil (simulasi). Terima kasih!',
++  failed: 'Pembayaran gagal (simulasi). Kamu bisa mencoba lagi.',
++  unpaid: 'Pesanan sudah tercatat, tapi belum dibayar.',
++}
++
++/** Teks WhatsApp untuk bertanya sebelum memesan survei. Ubah template di sini. */
++function composeMessage(f) {
+   const nama = f.nama.trim() || '(nama)'
+   const catatan = f.catatan.trim() ? ` Catatan: ${f.catatan.trim()}` : ''
+-
+-  if (mode === 'pemilik') {
+-    const kos = f.kos.trim() || '(nama kos)'
+-    const area = f.area.trim() || '(area kos)'
+-    return `Halo ${brand.name}, saya ${nama}, pemilik ${kos} di ${area}. Saya ingin memasang listing kos di katalog.${catatan}`
+-  }
+-
+   const plan = plans.items.find((p) => p.id === f.paket) ?? plans.items[0]
+   const kos = f.kos.trim() || '(nama kos atau link iklan)'
+   return `Halo ${brand.name}, saya ${nama}. Saya ingin memesan survei ${plan.name} (${rupiah(plan.price)}) untuk kos: ${kos}.${catatan}`
+ }
+ 
++/** Kirim JSON ke backend. Melempar Error dengan pesan yang aman ditampilkan ke pengguna. */
++async function postJson(url, payload) {
++  const res = await fetch(url, {
++    method: 'POST',
++    headers: { 'content-type': 'application/json' },
++    body: JSON.stringify(payload),
++  })
++  const data = await res.json().catch(() => ({}))
++  if (!res.ok) throw new Error(data.error || 'Permintaan belum bisa diproses. Coba lagi sebentar.')
++  return data
++}
++
+ export default function Order() {
+   const uid = useId().replace(/:/g, '')
+   const { intent } = useOrderIntent()
+@@ -41,7 +52,8 @@ export default function Order() {
+   const [forms, setForms] = useState(initialForms)
+   const [status, setStatus] = useState('')
+   const [error, setError] = useState('')
+-  const [paying, setPaying] = useState(false)
++  const [sending, setSending] = useState(false)
++  const [dummy, setDummy] = useState(null) // pesanan yang sedang dibayar di tampilan dummy
+   const [done, setDone] = useState(null)
+ 
+   // Tombol lain di halaman (paket, katalog, pemilik kos) mengisi form lewat intent
+@@ -69,71 +81,74 @@ export default function Order() {
+     setForms((prev) => ({ ...prev, [mode]: { ...prev[mode], [field]: value } }))
+   }
+ 
+-  const message = composeMessage(mode, form)
+-  const waUrl = contact.whatsapp ? `https://wa.me/${contact.whatsapp}?text=${encodeURIComponent(message)}` : ''
++  const waMessage = composeMessage(forms.survei)
++  const waUrl = contact.whatsapp ? `https://wa.me/${contact.whatsapp}?text=${encodeURIComponent(waMessage)}` : ''
+ 
+   const plan = plans.items.find((p) => p.id === forms.survei.paket) ?? plans.items[0]
+ 
+-  function finish(orderId, state) {
+-    setDone({ orderId, state, nama: form.nama.trim(), kos: form.kos.trim(), plan: plan.name })
+-    setStatus(
+-      state === 'paid'
+-        ? 'Pembayaran berhasil. Terima kasih!'
+-        : 'Menunggu pembayaran. Selesaikan sesuai petunjuk di jendela pembayaran sebelum kedaluwarsa.',
+-    )
+-  }
+-
+-  /** Buat transaksi di server (/api/pay), lalu buka jendela pembayaran Midtrans di halaman ini. */
+-  async function pay() {
++  /** Pesan survei: simpan pesanan ke backend (/api/orders), lalu buka tampilan pembayaran dummy. */
++  async function startOrder() {
+     setStatus('')
+     setError('')
+     setDone(null)
+-    setPaying(true)
++    setSending(true)
+     try {
+-      const res = await fetch('/api/pay', {
+-        method: 'POST',
+-        headers: { 'content-type': 'application/json' },
+-        body: JSON.stringify(form),
+-      })
+-      const data = await res.json().catch(() => ({}))
+-      if (!res.ok) throw new Error(data.error || 'Pembayaran belum bisa dimulai. Coba lagi sebentar.')
+-      await payWithSnap(data, {
+-        onSuccess: () => finish(data.orderId, 'paid'),
+-        onPending: () => finish(data.orderId, 'pending'),
+-        onError: () => setError('Pembayaran gagal. Coba lagi, atau pesan lewat WhatsApp.'),
+-        onClose: () => setStatus((prev) => prev || 'Jendela pembayaran ditutup sebelum selesai. Tekan Bayar untuk mencoba lagi.'),
++      const data = await postJson('/api/orders', form)
++      setDummy({
++        orderId: data.orderId,
++        amount: data.amount,
++        planName: data.planName,
++        nama: form.nama.trim(),
++        kos: form.kos.trim(),
+       })
+     } catch (err) {
+       setError(err.message)
+     } finally {
+-      setPaying(false)
++      setSending(false)
+     }
+   }
+ 
+-  const confirmUrl =
+-    done && contact.whatsapp
+-      ? `https://wa.me/${contact.whatsapp}?text=${encodeURIComponent(
+-          `Halo ${brand.name}, saya ${done.nama}. Pesanan ${done.orderId}: survei ${done.plan} untuk kos ${done.kos}.` +
+-            (done.state === 'paid' ? ' Pembayaran sudah selesai.' : ''),
+-        )}`
+-      : ''
++  /** state: 'paid' | 'failed' | 'unpaid' (jendela ditutup sebelum bayar) */
++  function afterPay(order, state) {
++    setDummy(null)
++    setDone({ kind: 'order', state, order })
++    setStatus('')
++    setError('')
++    if (state === 'failed') setError(PAY_MESSAGE.failed)
++    else setStatus(PAY_MESSAGE[state])
++  }
+ 
+-  async function handleSubmit(event) {
+-    event.preventDefault()
+-    if (mode === 'survei') return pay()
+-    if (waUrl) {
+-      window.open(waUrl, '_blank', 'noopener,noreferrer')
+-      setStatus('Membuka WhatsApp.')
+-      return
+-    }
++  /** Pasang listing: simpan pendaftaran kos ke backend (/api/listings). */
++  async function registerListing() {
++    setStatus('')
++    setError('')
++    setDone(null)
++    setSending(true)
+     try {
+-      await navigator.clipboard.writeText(message)
+-      setStatus('Pesan disalin. Tempel ke WhatsApp atau email tim KOSCHECK!.')
+-    } catch {
+-      setStatus('Pesan belum bisa disalin otomatis. Salin dari kotak pratinjau di atas.')
++      const data = await postJson('/api/listings', form)
++      setDone({ kind: 'listing', id: data.listingId, nama: form.nama.trim(), kos: form.kos.trim() })
++      setStatus('Pendaftaran kos tercatat. Tim KOSCHECK akan menghubungi lewat WhatsApp.')
++      setForms((prev) => ({ ...prev, pemilik: initialForms.pemilik }))
++    } catch (err) {
++      setError(err.message)
++    } finally {
++      setSending(false)
+     }
+   }
+ 
++  const confirmText = !done
++    ? ''
++    : done.kind === 'listing'
++      ? `Halo ${brand.name}, saya ${done.nama}. Saya sudah mendaftarkan kos ${done.kos} (nomor ${done.id}).`
++      : `Halo ${brand.name}, saya ${done.order.nama}. Pesanan ${done.order.orderId}: survei ${done.order.planName} untuk kos ${done.order.kos}.` +
++        (done.state === 'paid' ? ' Pembayaran sudah selesai.' : '')
++  const confirmUrl = confirmText && contact.whatsapp ? `https://wa.me/${contact.whatsapp}?text=${encodeURIComponent(confirmText)}` : ''
++
++  function handleSubmit(event) {
++    event.preventDefault()
++    return mode === 'survei' ? startOrder() : registerListing()
++  }
++
+   const id = (name) => `${uid}-${name}`
+ 
+   return (
+@@ -167,22 +182,24 @@ export default function Order() {
+               <input id={id('nama')} type="text" required autoComplete="name" value={form.nama} onChange={update('nama')} />
+             </div>
+ 
+-            {mode === 'survei' && (
+-              <div className={s.field}>
+-                <label htmlFor={id('whatsapp')}>Nomor WhatsApp</label>
+-                <input
+-                  id={id('whatsapp')}
+-                  type="tel"
+-                  inputMode="tel"
+-                  required
+-                  autoComplete="tel"
+-                  placeholder="Contoh: 081234567890"
+-                  value={form.whatsapp}
+-                  onChange={update('whatsapp')}
+-                />
+-                <p className={s.hint}>Tim KOSCHECK memakai nomor ini untuk mengirim laporan survei.</p>
+-              </div>
+-            )}
++            <div className={s.field}>
++              <label htmlFor={id('whatsapp')}>Nomor WhatsApp</label>
++              <input
++                id={id('whatsapp')}
++                type="tel"
++                inputMode="tel"
++                required
++                autoComplete="tel"
++                placeholder="Contoh: 081234567890"
++                value={form.whatsapp}
++                onChange={update('whatsapp')}
++              />
++              <p className={s.hint}>
++                {mode === 'survei'
++                  ? 'Tim KOSCHECK memakai nomor ini untuk mengirim laporan survei.'
++                  : 'Tim KOSCHECK memakai nomor ini untuk menghubungimu soal listing.'}
++              </p>
++            </div>
+ 
+             <div className={s.field}>
+               <label htmlFor={id('kos')}>{mode === 'survei' ? 'Kos yang ingin dicek' : 'Nama kosmu'}</label>
+@@ -236,16 +253,19 @@ export default function Order() {
+                 </>
+               ) : (
+                 <>
+-                  <p className={s.previewLabel}>Pesan yang akan dikirim</p>
+-                  <p className={s.previewText}>{message}</p>
++                  <p className={s.previewLabel}>Yang akan didaftarkan</p>
++                  <p className={s.previewText}>
++                    {form.kos.trim() || '(nama kos)'} di {form.area.trim() || '(area kos)'}, atas nama{' '}
++                    {form.nama.trim() || '(nama)'}.
++                  </p>
+                 </>
+               )}
+             </div>
+ 
+             {mode === 'survei' ? (
+               <div className={s.actions}>
+-                <Button as="button" type="submit" disabled={paying}>
+-                  {paying ? 'Menyiapkan pembayaran' : `Bayar ${rupiah(plan.price)}`}
++                <Button as="button" type="submit" disabled={sending}>
++                  {sending ? 'Menyiapkan pembayaran' : `Bayar ${rupiah(plan.price)}`}
+                 </Button>
+                 {waUrl && (
+                   <Button as="a" variant="secondary" href={waUrl} target="_blank" rel="noopener noreferrer">
+@@ -254,8 +274,8 @@ export default function Order() {
+                 )}
+               </div>
+             ) : (
+-              <Button as="button" type="submit">
+-                {waUrl ? 'Pesan lewat WhatsApp' : 'Salin pesan'}
++              <Button as="button" type="submit" disabled={sending}>
++                {sending ? 'Menyimpan pendaftaran' : 'Daftarkan kos'}
+               </Button>
+             )}
+ 
+@@ -272,11 +292,26 @@ export default function Order() {
+             {done && (
+               <div className={s.done}>
+                 <p>
+-                  Nomor pesanan: <strong>{done.orderId}</strong>
++                  {done.kind === 'listing' ? 'Nomor pendaftaran' : 'Nomor pesanan'}:{' '}
++                  <strong>{done.kind === 'listing' ? done.id : done.order.orderId}</strong>
+                 </p>
++                {done.kind === 'order' && done.state !== 'paid' && (
++                  <Button
++                    as="button"
++                    size="sm"
++                    onClick={() => {
++                      setDummy(done.order)
++                      setDone(null)
++                      setStatus('')
++                      setError('')
++                    }}
++                  >
++                    Lanjutkan pembayaran
++                  </Button>
++                )}
+                 {confirmUrl && (
+                   <Button as="a" variant="secondary" size="sm" href={confirmUrl} target="_blank" rel="noopener noreferrer">
+-                    Kirim nomor pesanan ke WhatsApp
++                    {done.kind === 'listing' ? 'Kirim nomor pendaftaran ke WhatsApp' : 'Kirim nomor pesanan ke WhatsApp'}
+                   </Button>
+                 )}
+               </div>
+@@ -289,6 +324,14 @@ export default function Order() {
+               </p>
+             )}
+           </form>
++
++          {dummy && (
++            <DummyPay
++              order={dummy}
++              onFinish={(hasil) => afterPay(dummy, hasil === 'paid' ? 'paid' : 'failed')}
++              onClose={() => afterPay(dummy, 'unpaid')}
++            />
++          )}
+         </div>
+       </div>
+     </Section>
+diff --git a/vite.config.js b/vite.config.js
+index 69e85e8..2127ea9 100644
+--- a/vite.config.js
++++ b/vite.config.js
+@@ -6,9 +6,14 @@ import react from '@vitejs/plugin-react'
+ // Saat `npm run dev`, Vercel Functions tidak jalan. Plugin ini menjalankan file di folder api/ lewat Vite.
+ // Di production (Vercel), file api/*.js dipakai langsung.
+ // (api/pay-notify.js tidak ada di sini: Midtrans tidak bisa memanggil localhost. Uji setelah deploy.)
++// Fungsi dipanggil sebagai fn(body, env, req). `method` bawaan POST.
+ const DEV_API = {
+   '/api/chat': { file: 'api/chat.js', fn: 'chat' },
+   '/api/pay': { file: 'api/pay.js', fn: 'createPayment' },
++  '/api/orders': { file: 'api/orders.js', fn: 'createOrder' },
++  '/api/pay-dummy': { file: 'api/pay-dummy.js', fn: 'dummyPay' },
++  '/api/listings': { file: 'api/listings.js', fn: 'createListing' },
++  '/api/admin': { file: 'api/admin.js', fn: 'listData', method: 'GET' },
+ }
+ 
+ function devApi(env) {
+@@ -16,21 +21,23 @@ function devApi(env) {
+     name: 'dev-api',
+     apply: 'serve',
+     configureServer(server) {
+-      for (const [route, { file, fn }] of Object.entries(DEV_API)) {
++      for (const [route, { file, fn, method = 'POST' }] of Object.entries(DEV_API)) {
+         server.middlewares.use(route, async (req, res) => {
+           let status = 405
+-          let data = { error: 'Gunakan POST.' }
+-          if (req.method === 'POST') {
+-            let raw = ''
+-            for await (const part of req) raw += part
++          let data = { error: `Gunakan ${method}.` }
++          if (req.method === method) {
+             let body = {}
+-            try {
+-              body = JSON.parse(raw)
+-            } catch {
+-              /* body kosong atau bukan JSON */
++            if (method === 'POST') {
++              let raw = ''
++              for await (const part of req) raw += part
++              try {
++                body = JSON.parse(raw)
++              } catch {
++                /* body kosong atau bukan JSON */
++              }
+             }
+             const url = pathToFileURL(path.resolve(file)).href + `?t=${Date.now()}`
+-            ;({ status, data } = await (await import(url))[fn](body, env))
++            ;({ status, data } = await (await import(url))[fn](body, env, req))
+           }
+           res.statusCode = status
+           res.setHeader('content-type', 'application/json')

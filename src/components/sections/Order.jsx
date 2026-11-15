@@ -2,10 +2,10 @@ import { useEffect, useId, useState } from 'react'
 import Section from '../ui/Section.jsx'
 import SectionHead from '../ui/SectionHead.jsx'
 import Button from '../ui/Button.jsx'
+import DummyPay from '../pay/DummyPay.jsx'
 import { useOrderIntent } from '../../context/OrderIntent.jsx'
 import { order, plans, contact, brand } from '../../content/site.js'
 import { rupiah } from '../../lib/format.js'
-import { payWithSnap } from '../../lib/snap.js'
 import s from './Order.module.css'
 
 const MODES = [
@@ -15,23 +15,34 @@ const MODES = [
 
 const initialForms = {
   survei: { nama: '', whatsapp: '', kos: '', paket: plans.items[0].id, catatan: '' },
-  pemilik: { nama: '', kos: '', area: '', catatan: '' },
+  pemilik: { nama: '', whatsapp: '', kos: '', area: '', catatan: '' },
 }
 
-/** Susun teks pesan yang dikirim ke tim KOSCHECK. Ubah template di sini. */
-function composeMessage(mode, f) {
+const PAY_MESSAGE = {
+  paid: 'Pembayaran berhasil (simulasi). Terima kasih!',
+  failed: 'Pembayaran gagal (simulasi). Kamu bisa mencoba lagi.',
+  unpaid: 'Pesanan sudah tercatat, tapi belum dibayar.',
+}
+
+/** Teks WhatsApp untuk bertanya sebelum memesan survei. Ubah template di sini. */
+function composeMessage(f) {
   const nama = f.nama.trim() || '(nama)'
   const catatan = f.catatan.trim() ? ` Catatan: ${f.catatan.trim()}` : ''
-
-  if (mode === 'pemilik') {
-    const kos = f.kos.trim() || '(nama kos)'
-    const area = f.area.trim() || '(area kos)'
-    return `Halo ${brand.name}, saya ${nama}, pemilik ${kos} di ${area}. Saya ingin memasang listing kos di katalog.${catatan}`
-  }
-
   const plan = plans.items.find((p) => p.id === f.paket) ?? plans.items[0]
   const kos = f.kos.trim() || '(nama kos atau link iklan)'
   return `Halo ${brand.name}, saya ${nama}. Saya ingin memesan survei ${plan.name} (${rupiah(plan.price)}) untuk kos: ${kos}.${catatan}`
+}
+
+/** Kirim JSON ke backend. Melempar Error dengan pesan yang aman ditampilkan ke pengguna. */
+async function postJson(url, payload) {
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(data.error || 'Permintaan belum bisa diproses. Coba lagi sebentar.')
+  return data
 }
 
 export default function Order() {
@@ -41,7 +52,8 @@ export default function Order() {
   const [forms, setForms] = useState(initialForms)
   const [status, setStatus] = useState('')
   const [error, setError] = useState('')
-  const [paying, setPaying] = useState(false)
+  const [sending, setSending] = useState(false)
+  const [dummy, setDummy] = useState(null) // pesanan yang sedang dibayar di tampilan dummy
   const [done, setDone] = useState(null)
 
   // Tombol lain di halaman (paket, katalog, pemilik kos) mengisi form lewat intent
@@ -69,69 +81,72 @@ export default function Order() {
     setForms((prev) => ({ ...prev, [mode]: { ...prev[mode], [field]: value } }))
   }
 
-  const message = composeMessage(mode, form)
-  const waUrl = contact.whatsapp ? `https://wa.me/${contact.whatsapp}?text=${encodeURIComponent(message)}` : ''
+  const waMessage = composeMessage(forms.survei)
+  const waUrl = contact.whatsapp ? `https://wa.me/${contact.whatsapp}?text=${encodeURIComponent(waMessage)}` : ''
 
   const plan = plans.items.find((p) => p.id === forms.survei.paket) ?? plans.items[0]
 
-  function finish(orderId, state) {
-    setDone({ orderId, state, nama: form.nama.trim(), kos: form.kos.trim(), plan: plan.name })
-    setStatus(
-      state === 'paid'
-        ? 'Pembayaran berhasil. Terima kasih!'
-        : 'Menunggu pembayaran. Selesaikan sesuai petunjuk di jendela pembayaran sebelum kedaluwarsa.',
-    )
-  }
-
-  /** Buat transaksi di server (/api/pay), lalu buka jendela pembayaran Midtrans di halaman ini. */
-  async function pay() {
+  /** Pesan survei: simpan pesanan ke backend (/api/orders), lalu buka tampilan pembayaran dummy. */
+  async function startOrder() {
     setStatus('')
     setError('')
     setDone(null)
-    setPaying(true)
+    setSending(true)
     try {
-      const res = await fetch('/api/pay', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(form),
-      })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(data.error || 'Pembayaran belum bisa dimulai. Coba lagi sebentar.')
-      await payWithSnap(data, {
-        onSuccess: () => finish(data.orderId, 'paid'),
-        onPending: () => finish(data.orderId, 'pending'),
-        onError: () => setError('Pembayaran gagal. Coba lagi, atau pesan lewat WhatsApp.'),
-        onClose: () => setStatus((prev) => prev || 'Jendela pembayaran ditutup sebelum selesai. Tekan Bayar untuk mencoba lagi.'),
+      const data = await postJson('/api/orders', form)
+      setDummy({
+        orderId: data.orderId,
+        amount: data.amount,
+        planName: data.planName,
+        nama: form.nama.trim(),
+        kos: form.kos.trim(),
       })
     } catch (err) {
       setError(err.message)
     } finally {
-      setPaying(false)
+      setSending(false)
     }
   }
 
-  const confirmUrl =
-    done && contact.whatsapp
-      ? `https://wa.me/${contact.whatsapp}?text=${encodeURIComponent(
-          `Halo ${brand.name}, saya ${done.nama}. Pesanan ${done.orderId}: survei ${done.plan} untuk kos ${done.kos}.` +
-            (done.state === 'paid' ? ' Pembayaran sudah selesai.' : ''),
-        )}`
-      : ''
+  /** state: 'paid' | 'failed' | 'unpaid' (jendela ditutup sebelum bayar) */
+  function afterPay(order, state) {
+    setDummy(null)
+    setDone({ kind: 'order', state, order })
+    setStatus('')
+    setError('')
+    if (state === 'failed') setError(PAY_MESSAGE.failed)
+    else setStatus(PAY_MESSAGE[state])
+  }
 
-  async function handleSubmit(event) {
-    event.preventDefault()
-    if (mode === 'survei') return pay()
-    if (waUrl) {
-      window.open(waUrl, '_blank', 'noopener,noreferrer')
-      setStatus('Membuka WhatsApp.')
-      return
-    }
+  /** Pasang listing: simpan pendaftaran kos ke backend (/api/listings). */
+  async function registerListing() {
+    setStatus('')
+    setError('')
+    setDone(null)
+    setSending(true)
     try {
-      await navigator.clipboard.writeText(message)
-      setStatus('Pesan disalin. Tempel ke WhatsApp atau email tim KOSCHECK!.')
-    } catch {
-      setStatus('Pesan belum bisa disalin otomatis. Salin dari kotak pratinjau di atas.')
+      const data = await postJson('/api/listings', form)
+      setDone({ kind: 'listing', id: data.listingId, nama: form.nama.trim(), kos: form.kos.trim() })
+      setStatus('Pendaftaran kos tercatat. Tim KOSCHECK akan menghubungi lewat WhatsApp.')
+      setForms((prev) => ({ ...prev, pemilik: initialForms.pemilik }))
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setSending(false)
     }
+  }
+
+  const confirmText = !done
+    ? ''
+    : done.kind === 'listing'
+      ? `Halo ${brand.name}, saya ${done.nama}. Saya sudah mendaftarkan kos ${done.kos} (nomor ${done.id}).`
+      : `Halo ${brand.name}, saya ${done.order.nama}. Pesanan ${done.order.orderId}: survei ${done.order.planName} untuk kos ${done.order.kos}.` +
+        (done.state === 'paid' ? ' Pembayaran sudah selesai.' : '')
+  const confirmUrl = confirmText && contact.whatsapp ? `https://wa.me/${contact.whatsapp}?text=${encodeURIComponent(confirmText)}` : ''
+
+  function handleSubmit(event) {
+    event.preventDefault()
+    return mode === 'survei' ? startOrder() : registerListing()
   }
 
   const id = (name) => `${uid}-${name}`
@@ -167,22 +182,24 @@ export default function Order() {
               <input id={id('nama')} type="text" required autoComplete="name" value={form.nama} onChange={update('nama')} />
             </div>
 
-            {mode === 'survei' && (
-              <div className={s.field}>
-                <label htmlFor={id('whatsapp')}>Nomor WhatsApp</label>
-                <input
-                  id={id('whatsapp')}
-                  type="tel"
-                  inputMode="tel"
-                  required
-                  autoComplete="tel"
-                  placeholder="Contoh: 081234567890"
-                  value={form.whatsapp}
-                  onChange={update('whatsapp')}
-                />
-                <p className={s.hint}>Tim KOSCHECK memakai nomor ini untuk mengirim laporan survei.</p>
-              </div>
-            )}
+            <div className={s.field}>
+              <label htmlFor={id('whatsapp')}>Nomor WhatsApp</label>
+              <input
+                id={id('whatsapp')}
+                type="tel"
+                inputMode="tel"
+                required
+                autoComplete="tel"
+                placeholder="Contoh: 081234567890"
+                value={form.whatsapp}
+                onChange={update('whatsapp')}
+              />
+              <p className={s.hint}>
+                {mode === 'survei'
+                  ? 'Tim KOSCHECK memakai nomor ini untuk mengirim laporan survei.'
+                  : 'Tim KOSCHECK memakai nomor ini untuk menghubungimu soal listing.'}
+              </p>
+            </div>
 
             <div className={s.field}>
               <label htmlFor={id('kos')}>{mode === 'survei' ? 'Kos yang ingin dicek' : 'Nama kosmu'}</label>
@@ -236,16 +253,19 @@ export default function Order() {
                 </>
               ) : (
                 <>
-                  <p className={s.previewLabel}>Pesan yang akan dikirim</p>
-                  <p className={s.previewText}>{message}</p>
+                  <p className={s.previewLabel}>Yang akan didaftarkan</p>
+                  <p className={s.previewText}>
+                    {form.kos.trim() || '(nama kos)'} di {form.area.trim() || '(area kos)'}, atas nama{' '}
+                    {form.nama.trim() || '(nama)'}.
+                  </p>
                 </>
               )}
             </div>
 
             {mode === 'survei' ? (
               <div className={s.actions}>
-                <Button as="button" type="submit" disabled={paying}>
-                  {paying ? 'Menyiapkan pembayaran' : `Bayar ${rupiah(plan.price)}`}
+                <Button as="button" type="submit" disabled={sending}>
+                  {sending ? 'Menyiapkan pembayaran' : `Bayar ${rupiah(plan.price)}`}
                 </Button>
                 {waUrl && (
                   <Button as="a" variant="secondary" href={waUrl} target="_blank" rel="noopener noreferrer">
@@ -254,8 +274,8 @@ export default function Order() {
                 )}
               </div>
             ) : (
-              <Button as="button" type="submit">
-                {waUrl ? 'Pesan lewat WhatsApp' : 'Salin pesan'}
+              <Button as="button" type="submit" disabled={sending}>
+                {sending ? 'Menyimpan pendaftaran' : 'Daftarkan kos'}
               </Button>
             )}
 
@@ -272,11 +292,26 @@ export default function Order() {
             {done && (
               <div className={s.done}>
                 <p>
-                  Nomor pesanan: <strong>{done.orderId}</strong>
+                  {done.kind === 'listing' ? 'Nomor pendaftaran' : 'Nomor pesanan'}:{' '}
+                  <strong>{done.kind === 'listing' ? done.id : done.order.orderId}</strong>
                 </p>
+                {done.kind === 'order' && done.state !== 'paid' && (
+                  <Button
+                    as="button"
+                    size="sm"
+                    onClick={() => {
+                      setDummy(done.order)
+                      setDone(null)
+                      setStatus('')
+                      setError('')
+                    }}
+                  >
+                    Lanjutkan pembayaran
+                  </Button>
+                )}
                 {confirmUrl && (
                   <Button as="a" variant="secondary" size="sm" href={confirmUrl} target="_blank" rel="noopener noreferrer">
-                    Kirim nomor pesanan ke WhatsApp
+                    {done.kind === 'listing' ? 'Kirim nomor pendaftaran ke WhatsApp' : 'Kirim nomor pesanan ke WhatsApp'}
                   </Button>
                 )}
               </div>
@@ -289,6 +324,14 @@ export default function Order() {
               </p>
             )}
           </form>
+
+          {dummy && (
+            <DummyPay
+              order={dummy}
+              onFinish={(hasil) => afterPay(dummy, hasil === 'paid' ? 'paid' : 'failed')}
+              onClose={() => afterPay(dummy, 'unpaid')}
+            />
+          )}
         </div>
       </div>
     </Section>

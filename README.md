@@ -60,9 +60,28 @@ Widget chat di pojok kanan bawah. Pesan dikirim ke `api/chat.js` (Vercel Functio
 4. Pengetahuan AI diambil dari `content/site.js` dan `data/kos.js`, jadi ikut berubah saat kontennya diubah. Aturan jawabannya ada di `SYSTEM` pada `api/chat.js`.
 5. Teks widget (sapaan, pertanyaan contoh) ada di `content/site.js`, export `chat`.
 
+## Backend dan database
+
+Pesanan survei dan pendaftaran kos masuk ke database lewat Vercel Functions di `api/`:
+
+| Endpoint | Fungsi |
+| --- | --- |
+| `POST /api/orders` | Simpan pesanan survei (status `pending`). Harga diambil server dari `plans`, bukan dari browser. |
+| `POST /api/pay-dummy` | Pembayaran simulasi: ubah status pesanan jadi `paid` atau `failed`. |
+| `POST /api/listings` | Simpan pendaftaran kos dari pemilik (status `baru`). |
+| `GET /api/admin` | Lihat semua pesanan dan pendaftaran. Wajib header `x-admin-key`. |
+
+1. **Lokal tanpa setup**: biarkan `DATABASE_URL` kosong. Data disimpan di `.data/koshcheck.json` (tidak ikut di-commit).
+2. **Postgres (wajib di Vercel)**: buat database gratis di Supabase atau Neon, salin connection string ke `DATABASE_URL`. Tabel `orders` dan `listings` dibuat otomatis saat pertama dipakai.
+3. **Lihat data**: isi `ADMIN_KEY` (bebas, buatan sendiri), lalu `curl -H "x-admin-key: KUNCIMU" http://localhost:5173/api/admin`.
+
+File terkait: `api/_db.js` (penyimpanan, Postgres atau file JSON), `api/orders.js`, `api/listings.js`, `api/admin.js`.
+
 ## Pembayaran (Midtrans)
 
-Form pesan survei membuka jendela pembayaran Midtrans Snap di halaman yang sama (QRIS, transfer bank, e-wallet, dan metode lain yang diaktifkan di akun Midtrans). Harga selalu diambil server dari `plans` di `content/site.js`, bukan dari browser.
+**Status sekarang: tampilan dummy.** Tombol Bayar membuka dialog bergaya Midtrans (`src/components/pay/DummyPay.jsx`) yang hanya mengubah status pesanan di database lewat `api/pay-dummy.js`. Tidak ada panggilan ke Midtrans dan tidak ada uang yang berpindah. Begitu `MIDTRANS_SERVER_KEY` diisi, `api/pay-dummy.js` otomatis menolak semua permintaan. Untuk beralih ke Midtrans asli, di `Order.jsx` ganti `<DummyPay>` dengan alur `payWithSnap()` (lihat langkah di bawah), dan isi `onPaid()` di `api/pay-notify.js` untuk menandai pesanan lunas di database.
+
+Alur Midtrans asli (belum dipakai form saat ini): `api/pay.js` membuat transaksi dan `src/lib/snap.js` membuka jendela pembayaran Midtrans Snap (QRIS, transfer bank, e-wallet, dan metode lain yang diaktifkan di akun Midtrans). Harga selalu diambil server dari `plans` di `content/site.js`, bukan dari browser.
 
 1. Daftar di Midtrans, buka mode **Sandbox**, ambil Server Key dan Client Key (Settings > Access Keys).
 2. Isi `MIDTRANS_SERVER_KEY` dan `MIDTRANS_CLIENT_KEY` di `.env.local` (lihat `.env.example`), restart `npm run dev`. Di Vercel: Project Settings > Environment Variables, lalu redeploy.
