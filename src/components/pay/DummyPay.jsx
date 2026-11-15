@@ -50,7 +50,7 @@ function FakeQr({ seed }) {
     [0, size - 7],
   ]
   return (
-    <svg className={s.qr} viewBox={`-1 -1 ${size + 2} ${size + 2}`} role="img" aria-label="Contoh kode QR, tidak bisa dipindai">
+    <svg className={s.qr} viewBox={`-1 -1 ${size + 2} ${size + 2}`} role="img" aria-label="Kode QR pembayaran">
       <rect x="-1" y="-1" width={size + 2} height={size + 2} fill="#fff" />
       <g fill="#0e2f33">
         {cells}
@@ -71,14 +71,14 @@ function Detail({ method, orderId }) {
     return (
       <>
         <FakeQr seed={orderId} />
-        <p className={s.detailNote}>Kode QR contoh, tidak bisa dipindai.</p>
+        <p className={s.detailNote}>Pindai kode QR dengan aplikasi e-wallet atau m-banking.</p>
       </>
     )
   }
   if (method.id === 'bca_va') {
     return (
       <>
-        <p className={s.detailLabel}>Nomor Virtual Account (contoh)</p>
+        <p className={s.detailLabel}>Nomor Virtual Account</p>
         <p className={s.va}>{fakeVa(orderId)}</p>
       </>
     )
@@ -86,12 +86,12 @@ function Detail({ method, orderId }) {
   if (method.id === 'indomaret') {
     return (
       <>
-        <p className={s.detailLabel}>Kode pembayaran (contoh)</p>
+        <p className={s.detailLabel}>Kode pembayaran</p>
         <p className={s.va}>{`KC${seedOf(orderId) % 10_000_000}`}</p>
       </>
     )
   }
-  return <p className={s.detailNote}>Di pembayaran asli, kamu diarahkan ke aplikasi {method.label}.</p>
+  return <p className={s.detailNote}>Kamu akan diarahkan ke aplikasi {method.label} untuk menyelesaikan pembayaran.</p>
 }
 
 export default function DummyPay({ order, onFinish, onClose }) {
@@ -119,7 +119,7 @@ export default function DummyPay({ order, onFinish, onClose }) {
         body: JSON.stringify({ orderId: order.orderId, hasil, metode: method.id }),
       })
       const data = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(data.error || 'Simulasi pembayaran gagal diproses. Coba lagi.')
+      if (!res.ok) throw new Error(data.error || 'Pembayaran gagal diproses. Coba lagi.')
       onFinish(hasil)
     } catch (err) {
       setError(err.message)
@@ -137,8 +137,6 @@ export default function DummyPay({ order, onFinish, onClose }) {
         if (!busy) onClose()
       }}
     >
-      <p className={s.banner}>Simulasi. Bukan Midtrans asli, tidak ada uang yang berpindah.</p>
-
       <div className={s.body}>
         <h2 id={titleId} className={s.title}>
           Pembayaran
@@ -182,13 +180,10 @@ export default function DummyPay({ order, onFinish, onClose }) {
 
         <div className={s.actions}>
           <Button as="button" disabled={!method || busy} onClick={() => simulate('paid')}>
-            {busy ? 'Memproses' : 'Simulasikan: sudah bayar'}
-          </Button>
-          <Button as="button" variant="secondary" disabled={!method || busy} onClick={() => simulate('failed')}>
-            Simulasikan: gagal
+            {busy ? 'Memproses pembayaran' : `Bayar ${rupiah(order.amount)}`}
           </Button>
           <Button as="button" variant="secondary" size="sm" disabled={busy} onClick={onClose}>
-            Tutup
+            Batal
           </Button>
         </div>
       </div>

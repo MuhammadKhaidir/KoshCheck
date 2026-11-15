@@ -19,8 +19,8 @@ const initialForms = {
 }
 
 const PAY_MESSAGE = {
-  paid: 'Pembayaran berhasil (simulasi). Terima kasih!',
-  failed: 'Pembayaran gagal (simulasi). Kamu bisa mencoba lagi.',
+  paid: 'Pembayaran berhasil. Terima kasih!',
+  failed: 'Pembayaran gagal. Kamu bisa mencoba lagi.',
   unpaid: 'Pesanan sudah tercatat, tapi belum dibayar.',
 }
 

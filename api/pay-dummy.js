@@ -15,12 +15,12 @@ const clip = (value, max) => (typeof value === 'string' ? value.trim().slice(0, 
 
 export async function dummyPay(body, env) {
   if (env.MIDTRANS_SERVER_KEY) {
-    return { status: 403, data: { error: 'Simulasi pembayaran dimatikan karena Midtrans asli sudah aktif.' } }
+    return { status: 403, data: { error: 'Pembayaran tidak bisa diproses lewat jalur ini.' } }
   }
   const orderId = clip(body?.orderId, 60)
   const hasil = body?.hasil
   const metode = clip(body?.metode, 30) || null
-  if (!orderId || !HASIL.includes(hasil)) return { status: 400, data: { error: 'Data simulasi tidak lengkap.' } }
+  if (!orderId || !HASIL.includes(hasil)) return { status: 400, data: { error: 'Data pembayaran tidak lengkap.' } }
 
   try {
     const order = await getOrder(env, orderId)
