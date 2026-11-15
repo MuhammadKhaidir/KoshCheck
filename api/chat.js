@@ -153,11 +153,37 @@ function bersihkan(messages) {
   return out.at(-1)?.role === 'user' ? out : []
 }
 
+/*
+  Permintaan membuka halaman database dikenali di sini (server), bukan oleh AI, jadi tidak bisa
+  dibujuk lewat prompt dan tetap jalan walau API key AI belum diisi. Balasannya membawa
+  action: 'admin-login', lalu widget menampilkan kolom password. Password TIDAK dikirim lewat chat.
+*/
+const ADMIN_INTENT = new RegExp(
+  [
+    'database',
+    'dashboard',
+    'rekap',
+    'pendaftar|pemesan',
+    '(halaman|panel|menu|login|buka|masuk)\\W+(ke\\W+)?admin',
+    'admin\\W+(page|panel|halaman)',
+    'siapa\\W+(aja\\W+|saja\\W+)?(yang\\W+)?(sudah\\W+|udah\\W+|sdh\\W+|belum\\W+|blm\\W+)?(daftar|bayar|pesan|order)',
+  ].join('|'),
+  'i',
+)
+
+export const isAdminIntent = (text) => ADMIN_INTENT.test(text)
+
 export async function chat(body, env) {
-  if (!env.OPENROUTER_API_KEY && !env.ANTHROPIC_API_KEY)
-    return { status: 503, data: { error: 'OPENROUTER_API_KEY belum diisi.' } }
   const messages = bersihkan(body?.messages)
   if (!messages.length) return { status: 400, data: { error: 'Pesan kosong.' } }
+  if (env.ADMIN_KEY && isAdminIntent(messages.at(-1).content)) {
+    return {
+      status: 200,
+      data: { reply: 'Untuk membuka halaman database, masukkan password admin di bawah ini ya.', action: 'admin-login' },
+    }
+  }
+  if (!env.OPENROUTER_API_KEY && !env.ANTHROPIC_API_KEY)
+    return { status: 503, data: { error: 'OPENROUTER_API_KEY belum diisi.' } }
   try {
     const reply = await askModel(messages, env)
     return reply ? { status: 200, data: { reply } } : { status: 502, data: { error: 'Balasan kosong.' } }

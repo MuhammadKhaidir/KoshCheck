@@ -5,7 +5,7 @@ import s from './DummyPay.module.css'
 
 /*
   TAMPILAN DUMMY pembayaran bergaya Midtrans. Tidak terhubung ke Midtrans sama sekali.
-  Tombol "Simulasikan" memanggil /api/pay-dummy, yang hanya mengubah status pesanan di database.
+  Tombol Bayar memanggil /api/pay-dummy, yang hanya mengubah status pesanan di database.
 
   Nanti, saat akun Midtrans siap: di Order.jsx ganti <DummyPay> dengan alur payWithSnap()
   (src/lib/snap.js + /api/pay), lalu isi MIDTRANS_SERVER_KEY. Endpoint dummy otomatis mati.

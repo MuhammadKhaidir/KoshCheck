@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { OrderIntentProvider } from './context/OrderIntent.jsx'
 import Header from './components/layout/Header.jsx'
 import Footer from './components/layout/Footer.jsx'
@@ -10,12 +11,25 @@ import Owners from './components/sections/Owners.jsx'
 import Faq from './components/sections/Faq.jsx'
 import Order from './components/sections/Order.jsx'
 import ChatWidget from './components/chat/ChatWidget.jsx'
+import AdminPage from './pages/AdminPage.jsx'
+
+const isAdminHash = () => window.location.hash === '#/admin'
 
 /*
   Urutan section = urutan di halaman.
   Menambah section baru: buat komponennya di components/sections, lalu taruh di sini.
 */
 export default function App() {
+  // Halaman database dibuka lewat chat (#/admin). Tanpa react-router: cukup memantau hash.
+  const [admin, setAdmin] = useState(isAdminHash)
+  useEffect(() => {
+    const sync = () => setAdmin(isAdminHash())
+    window.addEventListener('hashchange', sync)
+    return () => window.removeEventListener('hashchange', sync)
+  }, [])
+
+  if (admin) return <AdminPage />
+
   return (
     <OrderIntentProvider>
       <div id="top">

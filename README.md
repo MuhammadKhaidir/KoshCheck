@@ -69,13 +69,15 @@ Pesanan survei dan pendaftaran kos masuk ke database lewat Vercel Functions di `
 | `POST /api/orders` | Simpan pesanan survei (status `pending`). Harga diambil server dari `plans`, bukan dari browser. |
 | `POST /api/pay-dummy` | Pembayaran simulasi: ubah status pesanan jadi `paid` atau `failed`. |
 | `POST /api/listings` | Simpan pendaftaran kos dari pemilik (status `baru`). |
-| `GET /api/admin` | Lihat semua pesanan dan pendaftaran. Wajib header `x-admin-key`. |
+| `POST /api/admin-login` | Cek password admin. Kalau benar, balas token login (berlaku 1 jam). |
+| `GET /api/admin` | Lihat semua pesanan dan pendaftaran. Wajib token login atau header `x-admin-key`. |
 
 1. **Lokal tanpa setup**: biarkan `DATABASE_URL` kosong. Data disimpan di `.data/koshcheck.json` (tidak ikut di-commit).
 2. **Postgres (wajib di Vercel)**: buat database gratis di Supabase atau Neon, salin connection string ke `DATABASE_URL`. Tabel `orders` dan `listings` dibuat otomatis saat pertama dipakai.
-3. **Lihat data**: isi `ADMIN_KEY` (bebas, buatan sendiri), lalu `curl -H "x-admin-key: KUNCIMU" http://localhost:5173/api/admin`.
+3. **Lihat data lewat chat**: isi `ADMIN_KEY` (ini password admin, bebas, buatan sendiri). Buka chat di pojok kanan bawah, ketik "buka database", lalu isi password di kolom yang muncul. Kalau benar, halaman database (`/#/admin`) terbuka dan menampilkan siapa yang sudah daftar beserta statusnya: lunas, belum bayar, atau gagal. Permintaan "buka database" dikenali server (bukan AI), dan password dikirim langsung ke `/api/admin-login`, tidak lewat chat. Sesi berlaku 1 jam.
+4. **Lihat data lewat terminal**: `curl -H "x-admin-key: PASSWORDMU" http://localhost:5173/api/admin`.
 
-File terkait: `api/_db.js` (penyimpanan, Postgres atau file JSON), `api/orders.js`, `api/listings.js`, `api/admin.js`.
+File terkait: `api/_db.js` (penyimpanan, Postgres atau file JSON), `api/orders.js`, `api/listings.js`, `api/admin.js`, `api/admin-login.js`, `api/_auth.js` (token dan pembatas percobaan), `src/pages/AdminPage.jsx` (halaman database).
 
 ## Pembayaran (Midtrans)
 

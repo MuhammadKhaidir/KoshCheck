@@ -1,7 +1,73 @@
-import { useEffect, useId, useRef, useState } from 'react'
+import { Fragment, useEffect, useId, useRef, useState } from 'react'
 import Icon from '../ui/Icon.jsx'
 import { chat as copy } from '../../content/site.js'
+import { saveToken } from '../../lib/adminSession.js'
 import s from './ChatWidget.module.css'
+
+/*
+  Kolom password admin di dalam chat. Password dikirim langsung ke /api/admin-login, TIDAK lewat
+  /api/chat, jadi tidak pernah dibaca AI dan tidak ikut masuk riwayat chat.
+  Kalau benar, token disimpan dan halaman database (#/admin) terbuka.
+*/
+function AdminLogin() {
+  const uid = useId()
+  const [password, setPassword] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+
+  async function login(event) {
+    event.preventDefault()
+    if (!password || busy) return
+    setBusy(true)
+    setError('')
+    try {
+      const res = await fetch('/api/admin-login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data.token) throw new Error(data.error || 'Gagal masuk. Coba lagi sebentar.')
+      try {
+        saveToken(data.token)
+      } catch {
+        throw new Error('Browser menolak menyimpan sesi. Matikan mode privat, lalu coba lagi.')
+      }
+      window.location.hash = '#/admin'
+    } catch (err) {
+      setError(err.message)
+      setPassword('')
+      setBusy(false)
+    }
+  }
+
+  return (
+    <form className={s.login} onSubmit={login}>
+      <label className="visually-hidden" htmlFor={`${uid}-pw`}>
+        Password admin
+      </label>
+      <input
+        id={`${uid}-pw`}
+        className={s.input}
+        type="password"
+        autoComplete="current-password"
+        autoFocus
+        maxLength={200}
+        placeholder="Password admin"
+        value={password}
+        onChange={(e) => setPassword(e.target.value)}
+      />
+      <button type="submit" className={s.send} aria-label="Masuk" disabled={busy || !password}>
+        <Icon name="arrow" />
+      </button>
+      {error && (
+        <p className={s.loginError} role="alert">
+          {error}
+        </p>
+      )}
+    </form>
+  )
+}
 
 /*
   Widget chat AI. Pesan dikirim ke /api/chat (api/chat.js), tempat API key disimpan.
@@ -40,11 +106,11 @@ export default function ChatWidget() {
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: history }),
+        body: JSON.stringify({ messages: history.map(({ role, content }) => ({ role, content })) }),
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok || !data.reply) throw new Error(data.error || `HTTP ${res.status}`)
-      setMessages([...history, { role: 'assistant', content: data.reply }])
+      setMessages([...history, { role: 'assistant', content: data.reply, ...(data.action && { action: data.action }) }])
     } catch (err) {
       console.error('[chat]', err)
       setError(copy.error)
@@ -108,9 +174,10 @@ export default function ChatWidget() {
         <div className={s.list} ref={listRef} role="log">
           <p className={`${s.msg} ${s.bot}`}>{copy.greeting}</p>
           {messages.map((m, i) => (
-            <p key={i} className={`${s.msg} ${m.role === 'user' ? s.me : s.bot}`}>
-              {m.content}
-            </p>
+            <Fragment key={i}>
+              <p className={`${s.msg} ${m.role === 'user' ? s.me : s.bot}`}>{m.content}</p>
+              {m.action === 'admin-login' && i === messages.length - 1 && <AdminLogin />}
+            </Fragment>
           ))}
           {messages.length === 0 && (
             <ul className={s.chips}>
