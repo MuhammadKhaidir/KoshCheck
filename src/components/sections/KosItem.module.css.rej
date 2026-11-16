@@ -1,0 +1,37 @@
+diff a/src/components/sections/KosItem.module.css b/src/components/sections/KosItem.module.css	(rejected hunks)
+@@ -1,6 +1,6 @@
+ .item {
+   display: grid;
+-  grid-template-columns: 5rem minmax(0, 1fr);
++  grid-template-columns: 7rem minmax(0, 1fr);
+   gap: var(--space-3) var(--space-4);
+   padding: var(--space-4);
+   background: var(--white);
+@@ -24,6 +26,18 @@
+   object-fit: cover;
+ }
+ 
++.photoNote {
++  position: absolute;
++  right: 0.35rem;
++  bottom: 0.35rem;
++  padding: 0.15rem 0.4rem;
++  border-radius: var(--radius-s);
++  background: rgb(0 0 0 / 62%);
++  color: #fff;
++  font-size: 0.65rem;
++  line-height: 1.3;
++}
++
+ .name {
+   font-size: var(--step-1);
+   font-weight: 700;
+@@ -96,7 +110,7 @@
+ 
+ @media (min-width: 44rem) {
+   .item {
+-    grid-template-columns: 6.5rem minmax(0, 1fr) 13rem;
++    grid-template-columns: 8rem minmax(0, 1fr) 13rem;
+     align-items: center;
+     gap: var(--space-5);
+   }

@@ -1,0 +1,20 @@
+diff a/src/components/sections/KosItem.jsx b/src/components/sections/KosItem.jsx	(rejected hunks)
+@@ -10,7 +10,17 @@ export default function KosItem({ kos }) {
+   return (
+     <li className={s.item}>
+       <div className={s.photo}>
+-        {foto ? <img src={foto} alt="" loading="lazy" /> : <Icon name="home" size={30} />}
++        {foto ? (
++          <img
++            src={foto}
++            alt={`Foto ilustrasi ${nama}`}
++            loading="lazy"
++            decoding="async"
++          />
++        ) : (
++          <Icon name="home" size={30} />
++        )}
++        {foto && <span className={s.photoNote}>Foto ilustrasi</span>}
+       </div>
+ 
+       <div className={s.info}>
