@@ -15,6 +15,7 @@ const DEV_API = {
   '/api/listings': { file: 'api/listings.js', fn: 'createListing' },
   '/api/admin': { file: 'api/admin.js', fn: 'listData', method: 'GET' },
   '/api/admin-login': { file: 'api/admin-login.js', fn: 'adminLogin' },
+  '/api/admin-listings': { file: 'api/admin-listings.js', fn: 'addListing' },
 }
 
 function devApi(env) {

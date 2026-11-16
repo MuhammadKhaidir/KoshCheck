@@ -50,6 +50,7 @@ function getSql(env) {
           status     text not null default 'baru',
           created_at timestamptz not null default now()
         )`
+      await sql`alter table listings add column if not exists foto text`
       return sql
     })()
     g.__koshDb = { url: env.DATABASE_URL, ready }
@@ -152,15 +153,15 @@ export async function insertListing(env, l) {
   if (!usePostgres(env)) {
     assertFileAllowed(env)
     return updateJson((db) => {
-      const row = { ...l, status: 'baru', created_at: new Date().toISOString() }
+      const row = { ...l, foto: l.foto ?? null, status: 'baru', created_at: new Date().toISOString() }
       db.listings.push(row)
       return row
     })
   }
   const sql = await getSql(env)
   const [row] = await sql`
-    insert into listings (id, nama, whatsapp, kos, area, catatan)
-    values (${l.id}, ${l.nama}, ${l.whatsapp}, ${l.kos}, ${l.area}, ${l.catatan})
+    insert into listings (id, nama, whatsapp, kos, area, catatan, foto)
+    values (${l.id}, ${l.nama}, ${l.whatsapp}, ${l.kos}, ${l.area}, ${l.catatan}, ${l.foto ?? null})
     returning *`
   return row
 }

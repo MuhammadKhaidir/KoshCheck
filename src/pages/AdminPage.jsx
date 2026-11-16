@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Container from '../components/ui/Container.jsx'
 import Button from '../components/ui/Button.jsx'
+import AddListingForm from './AddListingForm.jsx'
 import { plans } from '../content/site.js'
 import { rupiah } from '../lib/format.js'
 import { clearToken, getToken } from '../lib/adminSession.js'
@@ -262,6 +263,8 @@ export default function AdminPage() {
                 </h2>
               </div>
 
+              <AddListingForm onSaved={load} />
+
               {listings.length === 0 ? (
                 <p className={s.empty}>Belum ada pendaftaran.</p>
               ) : (
@@ -269,6 +272,7 @@ export default function AdminPage() {
                   <table className={s.table}>
                     <thead>
                       <tr>
+                        <th scope="col">Foto</th>
                         <th scope="col">Waktu</th>
                         <th scope="col">Pemilik</th>
                         <th scope="col">WhatsApp</th>
@@ -281,6 +285,13 @@ export default function AdminPage() {
                     <tbody>
                       {listings.map((l) => (
                         <tr key={l.id}>
+                          <td>
+                            {l.foto ? (
+                              <img className={s.thumb} src={l.foto} alt={`Foto ${l.kos}`} loading="lazy" />
+                            ) : (
+                              '-'
+                            )}
+                          </td>
                           <td className={s.nowrap}>{when(l.created_at)}</td>
                           <td>{l.nama}</td>
                           <td className={s.nowrap}>
