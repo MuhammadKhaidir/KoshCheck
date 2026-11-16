@@ -4,7 +4,6 @@ import '@fontsource-variable/bricolage-grotesque'
 import '@fontsource-variable/hanken-grotesk'
 import './styles/tokens.css'
 import './styles/base.css'
-import './styles/galaksi.css'
 import App from './App.jsx'
 
 createRoot(document.getElementById('root')).render(

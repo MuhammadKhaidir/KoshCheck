@@ -37,27 +37,6 @@
   /* Warna outline fokus. Di section gelap diganti kuning. */
   --focus: var(--ink);
 
-  /*
-    Token peran. Di tema terang nilainya sama dengan tampilan lama.
-    Tema galaksi (styles/galaksi.css) hanya mengganti nilai-nilai ini.
-  */
-  --on-marker: var(--ink); /* teks/ikon di atas warna kuning */
-  --edge: var(--ink); /* garis tepi kartu dan panel */
-  --logo-bg: var(--ink);
-  --logo-fg: var(--marker);
-
-  /* "Pita": permukaan pekat berisi teks terang (footer, section gelap, paket unggulan, kepala chat) */
-  --band: var(--ink);
-  --band-bg: var(--band);
-  --on-band: var(--paper);
-  --on-band-mute: var(--on-ink-mute);
-  --band-line: rgba(244, 247, 245, 0.22);
-
-  --line-sunk: #c3d1ca; /* garis di section "sunk" */
-  --scrim: rgba(14, 47, 51, 0.65); /* tirai di belakang dialog */
-  --rim-glow: none; /* cahaya tepi ombak/planet di pojok kiri bawah */
-  --stamp-blend: multiply; /* stempel "menyatu" dengan kertas */
-
   /* Tipografi */
   --font-display: 'Bricolage Grotesque Variable', 'Hanken Grotesk Variable', system-ui, sans-serif;
   --font-body: 'Hanken Grotesk Variable', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;

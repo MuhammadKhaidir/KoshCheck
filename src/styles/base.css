@@ -94,7 +94,7 @@ textarea {
 
 ::selection {
   background: var(--marker);
-  color: var(--on-marker);
+  color: var(--ink);
 }
 
 :focus-visible {
