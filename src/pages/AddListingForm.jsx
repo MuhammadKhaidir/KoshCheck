@@ -2,19 +2,23 @@ import { useRef, useState } from 'react'
 import Button from '../components/ui/Button.jsx'
 import { clearToken, getToken } from '../lib/adminSession.js'
 import { compressImage } from '../lib/image.js'
+import { FASILITAS, TIPE } from '../data/kos.js'
 import s from './AddListingForm.module.css'
 
-const EMPTY = { nama: '', whatsapp: '', kos: '', area: '', catatan: '' }
+const EMPTY = { nama: '', whatsapp: '', kos: '', area: '', catatan: '', tipe: '', harga: '' }
 
 /** Form tambah listing kos (+ foto) di halaman database. onSaved() dipanggil setelah berhasil disimpan. */
 export default function AddListingForm({ onSaved }) {
   const [form, setForm] = useState(EMPTY)
+  const [fasilitas, setFasilitas] = useState([])
   const [foto, setFoto] = useState('')
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState(null) // { ok: boolean, text: string }
   const fileRef = useRef(null)
 
   const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }))
+  const toggleFasilitas = (name) =>
+    setFasilitas((cur) => (cur.includes(name) ? cur.filter((f) => f !== name) : [...cur, name]))
 
   async function pickFile(e) {
     const file = e.target.files?.[0]
@@ -42,7 +46,7 @@ export default function AddListingForm({ onSaved }) {
       const res = await fetch('/api/admin-listings', {
         method: 'POST',
         headers: { 'content-type': 'application/json', authorization: `Bearer ${getToken()}` },
-        body: JSON.stringify({ ...form, foto }),
+        body: JSON.stringify({ ...form, harga: Number(form.harga), fasilitas, foto }),
       })
       const json = await res.json().catch(() => ({}))
       if (res.status === 401) {
@@ -52,8 +56,9 @@ export default function AddListingForm({ onSaved }) {
       }
       if (!res.ok) throw new Error(json.error || `HTTP ${res.status}`)
       setForm(EMPTY)
+      setFasilitas([])
       removeFoto()
-      setMsg({ ok: true, text: `Listing tersimpan (${json.listingId}).` })
+      setMsg({ ok: true, text: `Listing tersimpan dan tayang di katalog (${json.listingId}).` })
       onSaved()
     } catch (err) {
       setMsg({ ok: false, text: err.message })
@@ -75,6 +80,32 @@ export default function AddListingForm({ onSaved }) {
           <label htmlFor="al-area">Area</label>
           <input id="al-area" required maxLength={150} value={form.area} onChange={set('area')} />
         </div>
+        <div className={s.field}>
+          <label htmlFor="al-tipe">Tipe</label>
+          <select id="al-tipe" required value={form.tipe} onChange={set('tipe')}>
+            <option value="" disabled>
+              Pilih tipe
+            </option>
+            {TIPE.map((t) => (
+              <option key={t} value={t}>
+                Kos {t.toLowerCase()}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className={s.field}>
+          <label htmlFor="al-harga">Harga per bulan (Rp)</label>
+          <input id="al-harga" required type="number" inputMode="numeric" min={50000} step={50000} value={form.harga} onChange={set('harga')} />
+        </div>
+        <fieldset className={`${s.field} ${s.wide} ${s.checks}`}>
+          <legend>Fasilitas</legend>
+          {FASILITAS.map((f) => (
+            <label key={f} className={s.check}>
+              <input type="checkbox" checked={fasilitas.includes(f)} onChange={() => toggleFasilitas(f)} />
+              {f}
+            </label>
+          ))}
+        </fieldset>
         <div className={s.field}>
           <label htmlFor="al-nama">Nama pemilik</label>
           <input id="al-nama" required maxLength={60} value={form.nama} onChange={set('nama')} />

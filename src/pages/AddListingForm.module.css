@@ -33,7 +33,8 @@
   font-weight: 650;
 }
 
-.field input:not([type='file']),
+.field input:not([type='file']):not([type='checkbox']),
+.field select,
 .field textarea {
   width: 100%;
   padding: 0.7rem 0.85rem;
@@ -81,4 +82,25 @@
 
 .bad {
   color: var(--bad);
+}
+
+.checks {
+  grid-template-columns: repeat(auto-fit, minmax(9rem, max-content));
+  gap: var(--space-2) var(--space-5);
+  padding: 0;
+  border: 0;
+}
+
+.checks legend {
+  margin-bottom: var(--space-1);
+  padding: 0;
+  font-size: var(--step--1);
+  font-weight: 650;
+}
+
+.field label.check {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-weight: 500;
 }

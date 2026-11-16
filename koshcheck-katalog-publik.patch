@@ -1,0 +1,399 @@
+diff --git a/api/_db.js b/api/_db.js
+index bc8bf78..7f7df93 100644
+--- a/api/_db.js
++++ b/api/_db.js
+@@ -50,7 +50,13 @@ function getSql(env) {
+           status     text not null default 'baru',
+           created_at timestamptz not null default now()
+         )`
+-      await sql`alter table listings add column if not exists foto text`
++      await sql`
++        alter table listings
++          add column if not exists foto text,
++          add column if not exists harga integer,
++          add column if not exists tipe text,
++          add column if not exists fasilitas text,
++          add column if not exists publik boolean not null default false`
+       return sql
+     })()
+     g.__koshDb = { url: env.DATABASE_URL, ready }
+@@ -153,19 +159,41 @@ export async function insertListing(env, l) {
+   if (!usePostgres(env)) {
+     assertFileAllowed(env)
+     return updateJson((db) => {
+-      const row = { ...l, foto: l.foto ?? null, status: 'baru', created_at: new Date().toISOString() }
++      const row = {
++        ...l,
++        foto: l.foto ?? null,
++        harga: l.harga ?? null,
++        tipe: l.tipe ?? null,
++        fasilitas: l.fasilitas ?? null,
++        publik: l.publik ?? false,
++        status: 'baru',
++        created_at: new Date().toISOString(),
++      }
+       db.listings.push(row)
+       return row
+     })
+   }
+   const sql = await getSql(env)
+   const [row] = await sql`
+-    insert into listings (id, nama, whatsapp, kos, area, catatan, foto)
+-    values (${l.id}, ${l.nama}, ${l.whatsapp}, ${l.kos}, ${l.area}, ${l.catatan}, ${l.foto ?? null})
++    insert into listings (id, nama, whatsapp, kos, area, catatan, foto, harga, tipe, fasilitas, publik)
++    values (${l.id}, ${l.nama}, ${l.whatsapp}, ${l.kos}, ${l.area}, ${l.catatan}, ${l.foto ?? null},
++            ${l.harga ?? null}, ${l.tipe ?? null}, ${l.fasilitas ?? null}, ${l.publik ?? false})
+     returning *`
+   return row
+ }
+ 
++/** Listing yang ditandai publik (ditambah admin), untuk katalog di halaman utama. Terbaru di atas, maks 100. */
++export async function listPublicListings(env) {
++  if (!usePostgres(env)) {
++    assertFileAllowed(env)
++    return (await readJson()).listings.filter((l) => l.publik).reverse().slice(0, 100)
++  }
++  const sql = await getSql(env)
++  return sql`
++    select id, kos, area, tipe, harga, fasilitas, foto from listings
++    where publik order by created_at desc limit 100`
++}
++
+ /** Data terbaru di atas, maksimal 500 baris per tabel. */
+ export async function listAll(env) {
+   if (!usePostgres(env)) {
+diff --git a/api/admin-listings.js b/api/admin-listings.js
+index b32dd5b..2f0f172 100644
+--- a/api/admin-listings.js
++++ b/api/admin-listings.js
+@@ -2,7 +2,8 @@
+   Tambah listing kos (dengan foto) dari halaman database. Khusus admin.
+   Dilindungi sama seperti api/admin.js: Authorization: Bearer <token> atau x-admin-key.
+ 
+-  POST /api/admin-listings  { nama, whatsapp, kos, area, catatan, foto? }
++  POST /api/admin-listings  { nama, whatsapp, kos, area, catatan, tipe, harga, fasilitas[], foto? }
++    Listing ini langsung tayang di katalog halaman utama (lewat GET /api/kos).
+     foto = data URL JPEG (dikecilkan dulu di browser, lihat src/lib/image.js). Opsional.
+     -> 201 { listingId }
+ 
+@@ -12,6 +13,7 @@
+ import { isAdmin } from './_auth.js'
+ import { insertListing, newId } from './_db.js'
+ import { parseListing } from './listings.js'
++import { FASILITAS, TIPE } from '../src/data/kos.js'
+ 
+ export const FOTO_MAX_CHARS = 400_000
+ const FOTO_RE = /^data:image\/jpeg;base64,\/9j\/[A-Za-z0-9+/]+={0,2}$/
+@@ -23,6 +25,14 @@ export async function addListing(body, env, req) {
+   const { error, value } = parseListing(body)
+   if (error) return { status: 400, data: { error } }
+ 
++  const tipe = TIPE.find((t) => t === body?.tipe)
++  const harga = Number(body?.harga)
++  if (!tipe) return { status: 400, data: { error: 'Tipe kos belum dipilih.' } }
++  if (!Number.isInteger(harga) || harga < 50_000 || harga > 50_000_000) {
++    return { status: 400, data: { error: 'Harga per bulan belum benar.' } }
++  }
++  const fasilitas = FASILITAS.filter((f) => Array.isArray(body?.fasilitas) && body.fasilitas.includes(f)).join(',')
++
+   let foto = null
+   if (body?.foto) {
+     if (typeof body.foto !== 'string' || body.foto.length > FOTO_MAX_CHARS || !FOTO_RE.test(body.foto)) {
+@@ -33,7 +43,7 @@ export async function addListing(body, env, req) {
+ 
+   const id = newId('KL')
+   try {
+-    await insertListing(env, { id, ...value, foto })
++    await insertListing(env, { id, ...value, foto, tipe, harga, fasilitas, publik: true })
+   } catch (err) {
+     console.error('[admin-listings]', err)
+     return { status: 500, data: { error: 'Listing belum bisa disimpan. Coba lagi sebentar.' } }
+diff --git a/api/kos.js b/api/kos.js
+new file mode 100644
+index 0000000..bcab01b
+--- /dev/null
++++ b/api/kos.js
+@@ -0,0 +1,37 @@
++/*
++  Katalog kos dari database untuk halaman utama (Vercel Serverless Function). Publik, tanpa login.
++  Hanya listing yang ditambah admin (publik = true) dan hanya field yang aman ditampilkan:
++  nomor WhatsApp dan nama pemilik TIDAK ikut. Pendaftaran dari form pemilik tidak tampil di sini.
++
++  GET /api/kos  -> { kos: [{ id, nama, area, tipe, harga, fasilitas[], verified, dicekPada, foto }] }
++  Bentuk objeknya sama dengan src/data/kos.js, jadi Catalog bisa menggabungkan keduanya.
++*/
++import { listPublicListings } from './_db.js'
++
++export async function listKos(_body, env) {
++  try {
++    const rows = await listPublicListings(env)
++    const kos = rows.map((r) => ({
++      id: r.id,
++      nama: r.kos,
++      area: r.area,
++      tipe: r.tipe || 'Campur',
++      harga: Number(r.harga) || 0,
++      fasilitas: r.fasilitas ? r.fasilitas.split(',') : [],
++      verified: false,
++      dicekPada: null,
++      foto: r.foto || null,
++    }))
++    return { status: 200, data: { kos } }
++  } catch (err) {
++    console.error('[kos]', err)
++    return { status: 500, data: { error: 'Katalog belum bisa dimuat.' } }
++  }
++}
++
++export default async function handler(req, res) {
++  if (req.method !== 'GET') return res.status(405).json({ error: 'Gunakan GET.' })
++  const { status, data } = await listKos(null, process.env)
++  if (status === 200) res.setHeader('Cache-Control', 'public, s-maxage=30, stale-while-revalidate=120')
++  res.status(status).json(data)
++}
+diff --git a/src/components/sections/Catalog.jsx b/src/components/sections/Catalog.jsx
+index 468666a..56ada05 100644
+--- a/src/components/sections/Catalog.jsx
++++ b/src/components/sections/Catalog.jsx
+@@ -1,4 +1,4 @@
+-import { useMemo, useState } from 'react'
++import { useEffect, useMemo, useState } from 'react'
+ import Section from '../ui/Section.jsx'
+ import SectionHead from '../ui/SectionHead.jsx'
+ import Button from '../ui/Button.jsx'
+@@ -10,7 +10,26 @@ import s from './Catalog.module.css'
+ 
+ /** Katalog dengan filter harga, fasilitas, dan status verifikasi. Data dari src/data/kos.js. */
+ export default function Catalog() {
+-  const [maxPrice, setMaxPrice] = useState(HARGA_MAX)
++  const [maxPrice, setMaxPrice] = useState(null) // null = batas tertinggi (ikut harga termahal di katalog)
++  const [fromDb, setFromDb] = useState([]) // listing yang ditambah admin, diambil dari /api/kos
++
++  useEffect(() => {
++    let alive = true
++    fetch('/api/kos')
++      .then((r) => (r.ok ? r.json() : { kos: [] }))
++      .then((json) => alive && setFromDb(Array.isArray(json.kos) ? json.kos : []))
++      .catch(() => {}) // gagal ambil data: katalog tetap menampilkan data contoh
++    return () => {
++      alive = false
++    }
++  }, [])
++
++  const semua = useMemo(() => [...fromDb, ...kos], [fromDb])
++  const hargaMax = useMemo(
++    () => Math.max(HARGA_MAX, Math.ceil(Math.max(...semua.map((k) => k.harga)) / HARGA_STEP) * HARGA_STEP),
++    [semua],
++  )
++  const limit = maxPrice ?? hargaMax
+   const [onlyVerified, setOnlyVerified] = useState(false)
+   const [picked, setPicked] = useState([])
+ 
+@@ -18,20 +37,20 @@ export default function Catalog() {
+     setPicked((current) => (current.includes(name) ? current.filter((f) => f !== name) : [...current, name]))
+ 
+   const reset = () => {
+-    setMaxPrice(HARGA_MAX)
++    setMaxPrice(null)
+     setOnlyVerified(false)
+     setPicked([])
+   }
+ 
+   const results = useMemo(
+     () =>
+-      kos.filter(
++      semua.filter(
+         (k) =>
+-          k.harga <= maxPrice &&
++          k.harga <= limit &&
+           (!onlyVerified || k.verified) &&
+           picked.every((f) => k.fasilitas.includes(f)),
+       ),
+-    [maxPrice, onlyVerified, picked],
++    [semua, limit, onlyVerified, picked],
+   )
+ 
+   return (
+@@ -49,13 +68,13 @@ export default function Catalog() {
+               className={s.range}
+               type="range"
+               min={HARGA_MIN}
+-              max={HARGA_MAX}
++              max={hargaMax}
+               step={HARGA_STEP}
+-              value={maxPrice}
++              value={limit}
+               onChange={(e) => setMaxPrice(Number(e.target.value))}
+             />
+             <output className={s.rangeValue} htmlFor="harga-maks">
+-              {rupiah(maxPrice)}
++              {rupiah(limit)}
+             </output>
+           </div>
+         </div>
+diff --git a/src/data/kos.js b/src/data/kos.js
+index ad0eae1..9bbe3bd 100644
+--- a/src/data/kos.js
++++ b/src/data/kos.js
+@@ -6,6 +6,7 @@
+   dicekPada: tanggal survei terakhir (ISO), wajib ada bila verified = true.
+ */
+ export const FASILITAS = ['AC', 'Wi-Fi', 'KM dalam', 'Parkir motor']
++export const TIPE = ['Putra', 'Putri', 'Campur']
+ 
+ export const HARGA_MIN = 500000
+ export const HARGA_MAX = 1500000
+diff --git a/src/pages/AddListingForm.jsx b/src/pages/AddListingForm.jsx
+index d43f139..8283147 100644
+--- a/src/pages/AddListingForm.jsx
++++ b/src/pages/AddListingForm.jsx
+@@ -2,19 +2,23 @@ import { useRef, useState } from 'react'
+ import Button from '../components/ui/Button.jsx'
+ import { clearToken, getToken } from '../lib/adminSession.js'
+ import { compressImage } from '../lib/image.js'
++import { FASILITAS, TIPE } from '../data/kos.js'
+ import s from './AddListingForm.module.css'
+ 
+-const EMPTY = { nama: '', whatsapp: '', kos: '', area: '', catatan: '' }
++const EMPTY = { nama: '', whatsapp: '', kos: '', area: '', catatan: '', tipe: '', harga: '' }
+ 
+ /** Form tambah listing kos (+ foto) di halaman database. onSaved() dipanggil setelah berhasil disimpan. */
+ export default function AddListingForm({ onSaved }) {
+   const [form, setForm] = useState(EMPTY)
++  const [fasilitas, setFasilitas] = useState([])
+   const [foto, setFoto] = useState('')
+   const [busy, setBusy] = useState(false)
+   const [msg, setMsg] = useState(null) // { ok: boolean, text: string }
+   const fileRef = useRef(null)
+ 
+   const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }))
++  const toggleFasilitas = (name) =>
++    setFasilitas((cur) => (cur.includes(name) ? cur.filter((f) => f !== name) : [...cur, name]))
+ 
+   async function pickFile(e) {
+     const file = e.target.files?.[0]
+@@ -42,7 +46,7 @@ export default function AddListingForm({ onSaved }) {
+       const res = await fetch('/api/admin-listings', {
+         method: 'POST',
+         headers: { 'content-type': 'application/json', authorization: `Bearer ${getToken()}` },
+-        body: JSON.stringify({ ...form, foto }),
++        body: JSON.stringify({ ...form, harga: Number(form.harga), fasilitas, foto }),
+       })
+       const json = await res.json().catch(() => ({}))
+       if (res.status === 401) {
+@@ -52,8 +56,9 @@ export default function AddListingForm({ onSaved }) {
+       }
+       if (!res.ok) throw new Error(json.error || `HTTP ${res.status}`)
+       setForm(EMPTY)
++      setFasilitas([])
+       removeFoto()
+-      setMsg({ ok: true, text: `Listing tersimpan (${json.listingId}).` })
++      setMsg({ ok: true, text: `Listing tersimpan dan tayang di katalog (${json.listingId}).` })
+       onSaved()
+     } catch (err) {
+       setMsg({ ok: false, text: err.message })
+@@ -75,6 +80,32 @@ export default function AddListingForm({ onSaved }) {
+           <label htmlFor="al-area">Area</label>
+           <input id="al-area" required maxLength={150} value={form.area} onChange={set('area')} />
+         </div>
++        <div className={s.field}>
++          <label htmlFor="al-tipe">Tipe</label>
++          <select id="al-tipe" required value={form.tipe} onChange={set('tipe')}>
++            <option value="" disabled>
++              Pilih tipe
++            </option>
++            {TIPE.map((t) => (
++              <option key={t} value={t}>
++                Kos {t.toLowerCase()}
++              </option>
++            ))}
++          </select>
++        </div>
++        <div className={s.field}>
++          <label htmlFor="al-harga">Harga per bulan (Rp)</label>
++          <input id="al-harga" required type="number" inputMode="numeric" min={50000} step={50000} value={form.harga} onChange={set('harga')} />
++        </div>
++        <fieldset className={`${s.field} ${s.wide} ${s.checks}`}>
++          <legend>Fasilitas</legend>
++          {FASILITAS.map((f) => (
++            <label key={f} className={s.check}>
++              <input type="checkbox" checked={fasilitas.includes(f)} onChange={() => toggleFasilitas(f)} />
++              {f}
++            </label>
++          ))}
++        </fieldset>
+         <div className={s.field}>
+           <label htmlFor="al-nama">Nama pemilik</label>
+           <input id="al-nama" required maxLength={60} value={form.nama} onChange={set('nama')} />
+diff --git a/src/pages/AddListingForm.module.css b/src/pages/AddListingForm.module.css
+index 9676c37..03ea134 100644
+--- a/src/pages/AddListingForm.module.css
++++ b/src/pages/AddListingForm.module.css
+@@ -33,7 +33,8 @@
+   font-weight: 650;
+ }
+ 
+-.field input:not([type='file']),
++.field input:not([type='file']):not([type='checkbox']),
++.field select,
+ .field textarea {
+   width: 100%;
+   padding: 0.7rem 0.85rem;
+@@ -82,3 +83,24 @@
+ .bad {
+   color: var(--bad);
+ }
++
++.checks {
++  grid-template-columns: repeat(auto-fit, minmax(9rem, max-content));
++  gap: var(--space-2) var(--space-5);
++  padding: 0;
++  border: 0;
++}
++
++.checks legend {
++  margin-bottom: var(--space-1);
++  padding: 0;
++  font-size: var(--step--1);
++  font-weight: 650;
++}
++
++.field label.check {
++  display: flex;
++  align-items: center;
++  gap: var(--space-2);
++  font-weight: 500;
++}
+diff --git a/src/pages/AdminPage.jsx b/src/pages/AdminPage.jsx
+index af56a7a..ac178e6 100644
+--- a/src/pages/AdminPage.jsx
++++ b/src/pages/AdminPage.jsx
+@@ -297,7 +297,15 @@ export default function AdminPage() {
+                           <td className={s.nowrap}>
+                             <WhatsApp number={l.whatsapp} />
+                           </td>
+-                          <td className={s.wrap}>{l.kos}</td>
++                          <td className={s.wrap}>
++                            {l.kos}
++                            {l.publik && (
++                              <span className={s.cell2}>
++                                Tayang di katalog: {rupiah(l.harga)}, {l.tipe}
++                                {l.fasilitas ? `, ${l.fasilitas.split(',').join(', ')}` : ''}
++                              </span>
++                            )}
++                          </td>
+                           <td className={s.wrap}>{l.area}</td>
+                           <td className={s.wrap}>{l.catatan || '-'}</td>
+                           <td className={s.nowrap}>{l.id}</td>
+diff --git a/vite.config.js b/vite.config.js
+index 0fe0c8e..8568087 100644
+--- a/vite.config.js
++++ b/vite.config.js
+@@ -14,6 +14,7 @@ const DEV_API = {
+   '/api/pay-dummy': { file: 'api/pay-dummy.js', fn: 'dummyPay' },
+   '/api/listings': { file: 'api/listings.js', fn: 'createListing' },
+   '/api/admin': { file: 'api/admin.js', fn: 'listData', method: 'GET' },
++  '/api/kos': { file: 'api/kos.js', fn: 'listKos', method: 'GET' },
+   '/api/admin-login': { file: 'api/admin-login.js', fn: 'adminLogin' },
+   '/api/admin-listings': { file: 'api/admin-listings.js', fn: 'addListing' },
+ }

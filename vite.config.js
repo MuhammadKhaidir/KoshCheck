@@ -14,6 +14,7 @@ const DEV_API = {
   '/api/pay-dummy': { file: 'api/pay-dummy.js', fn: 'dummyPay' },
   '/api/listings': { file: 'api/listings.js', fn: 'createListing' },
   '/api/admin': { file: 'api/admin.js', fn: 'listData', method: 'GET' },
+  '/api/kos': { file: 'api/kos.js', fn: 'listKos', method: 'GET' },
   '/api/admin-login': { file: 'api/admin-login.js', fn: 'adminLogin' },
   '/api/admin-listings': { file: 'api/admin-listings.js', fn: 'addListing' },
 }

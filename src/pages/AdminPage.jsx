@@ -297,7 +297,15 @@ export default function AdminPage() {
                           <td className={s.nowrap}>
                             <WhatsApp number={l.whatsapp} />
                           </td>
-                          <td className={s.wrap}>{l.kos}</td>
+                          <td className={s.wrap}>
+                            {l.kos}
+                            {l.publik && (
+                              <span className={s.cell2}>
+                                Tayang di katalog: {rupiah(l.harga)}, {l.tipe}
+                                {l.fasilitas ? `, ${l.fasilitas.split(',').join(', ')}` : ''}
+                              </span>
+                            )}
+                          </td>
                           <td className={s.wrap}>{l.area}</td>
                           <td className={s.wrap}>{l.catatan || '-'}</td>
                           <td className={s.nowrap}>{l.id}</td>

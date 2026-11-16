@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Section from '../ui/Section.jsx'
 import SectionHead from '../ui/SectionHead.jsx'
 import Button from '../ui/Button.jsx'
@@ -10,7 +10,26 @@ import s from './Catalog.module.css'
 
 /** Katalog dengan filter harga, fasilitas, dan status verifikasi. Data dari src/data/kos.js. */
 export default function Catalog() {
-  const [maxPrice, setMaxPrice] = useState(HARGA_MAX)
+  const [maxPrice, setMaxPrice] = useState(null) // null = batas tertinggi (ikut harga termahal di katalog)
+  const [fromDb, setFromDb] = useState([]) // listing yang ditambah admin, diambil dari /api/kos
+
+  useEffect(() => {
+    let alive = true
+    fetch('/api/kos')
+      .then((r) => (r.ok ? r.json() : { kos: [] }))
+      .then((json) => alive && setFromDb(Array.isArray(json.kos) ? json.kos : []))
+      .catch(() => {}) // gagal ambil data: katalog tetap menampilkan data contoh
+    return () => {
+      alive = false
+    }
+  }, [])
+
+  const semua = useMemo(() => [...fromDb, ...kos], [fromDb])
+  const hargaMax = useMemo(
+    () => Math.max(HARGA_MAX, Math.ceil(Math.max(...semua.map((k) => k.harga)) / HARGA_STEP) * HARGA_STEP),
+    [semua],
+  )
+  const limit = maxPrice ?? hargaMax
   const [onlyVerified, setOnlyVerified] = useState(false)
   const [picked, setPicked] = useState([])
 
@@ -18,20 +37,20 @@ export default function Catalog() {
     setPicked((current) => (current.includes(name) ? current.filter((f) => f !== name) : [...current, name]))
 
   const reset = () => {
-    setMaxPrice(HARGA_MAX)
+    setMaxPrice(null)
     setOnlyVerified(false)
     setPicked([])
   }
 
   const results = useMemo(
     () =>
-      kos.filter(
+      semua.filter(
         (k) =>
-          k.harga <= maxPrice &&
+          k.harga <= limit &&
           (!onlyVerified || k.verified) &&
           picked.every((f) => k.fasilitas.includes(f)),
       ),
-    [maxPrice, onlyVerified, picked],
+    [semua, limit, onlyVerified, picked],
   )
 
   return (
@@ -49,13 +68,13 @@ export default function Catalog() {
               className={s.range}
               type="range"
               min={HARGA_MIN}
-              max={HARGA_MAX}
+              max={hargaMax}
               step={HARGA_STEP}
-              value={maxPrice}
+              value={limit}
               onChange={(e) => setMaxPrice(Number(e.target.value))}
             />
             <output className={s.rangeValue} htmlFor="harga-maks">
-              {rupiah(maxPrice)}
+              {rupiah(limit)}
             </output>
           </div>
         </div>

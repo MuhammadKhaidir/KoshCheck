@@ -50,7 +50,13 @@ function getSql(env) {
           status     text not null default 'baru',
           created_at timestamptz not null default now()
         )`
-      await sql`alter table listings add column if not exists foto text`
+      await sql`
+        alter table listings
+          add column if not exists foto text,
+          add column if not exists harga integer,
+          add column if not exists tipe text,
+          add column if not exists fasilitas text,
+          add column if not exists publik boolean not null default false`
       return sql
     })()
     g.__koshDb = { url: env.DATABASE_URL, ready }
@@ -153,17 +159,39 @@ export async function insertListing(env, l) {
   if (!usePostgres(env)) {
     assertFileAllowed(env)
     return updateJson((db) => {
-      const row = { ...l, foto: l.foto ?? null, status: 'baru', created_at: new Date().toISOString() }
+      const row = {
+        ...l,
+        foto: l.foto ?? null,
+        harga: l.harga ?? null,
+        tipe: l.tipe ?? null,
+        fasilitas: l.fasilitas ?? null,
+        publik: l.publik ?? false,
+        status: 'baru',
+        created_at: new Date().toISOString(),
+      }
       db.listings.push(row)
       return row
     })
   }
   const sql = await getSql(env)
   const [row] = await sql`
-    insert into listings (id, nama, whatsapp, kos, area, catatan, foto)
-    values (${l.id}, ${l.nama}, ${l.whatsapp}, ${l.kos}, ${l.area}, ${l.catatan}, ${l.foto ?? null})
+    insert into listings (id, nama, whatsapp, kos, area, catatan, foto, harga, tipe, fasilitas, publik)
+    values (${l.id}, ${l.nama}, ${l.whatsapp}, ${l.kos}, ${l.area}, ${l.catatan}, ${l.foto ?? null},
+            ${l.harga ?? null}, ${l.tipe ?? null}, ${l.fasilitas ?? null}, ${l.publik ?? false})
     returning *`
   return row
+}
+
+/** Listing yang ditandai publik (ditambah admin), untuk katalog di halaman utama. Terbaru di atas, maks 100. */
+export async function listPublicListings(env) {
+  if (!usePostgres(env)) {
+    assertFileAllowed(env)
+    return (await readJson()).listings.filter((l) => l.publik).reverse().slice(0, 100)
+  }
+  const sql = await getSql(env)
+  return sql`
+    select id, kos, area, tipe, harga, fasilitas, foto from listings
+    where publik order by created_at desc limit 100`
 }
 
 /** Data terbaru di atas, maksimal 500 baris per tabel. */
