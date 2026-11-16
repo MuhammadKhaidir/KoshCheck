@@ -1,6 +1,6 @@
 .stamp {
   transform: rotate(-9deg);
-  mix-blend-mode: multiply;
+  mix-blend-mode: var(--stamp-blend);
   opacity: 0.92;
   pointer-events: none;
 }

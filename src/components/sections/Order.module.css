@@ -14,7 +14,7 @@
 .panel {
   padding: var(--space-5);
   background: var(--white);
-  border: 2px solid var(--ink);
+  border: 2px solid var(--edge);
   border-radius: var(--radius-m);
 }
 

@@ -51,7 +51,7 @@
 .marker {
   background: var(--marker);
   border-color: var(--marker);
-  color: var(--ink);
+  color: var(--on-marker);
 }
 
 .marker:hover {

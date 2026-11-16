@@ -1,6 +1,6 @@
 .logo {
-  --mark-bg: var(--ink);
-  --mark-fg: var(--marker);
+  --mark-bg: var(--logo-bg);
+  --mark-fg: var(--logo-fg);
   display: inline-flex;
   align-items: center;
   gap: 0.6rem;
@@ -8,7 +8,7 @@
 
 .onDark {
   --mark-bg: var(--marker);
-  --mark-fg: var(--ink);
+  --mark-fg: var(--band);
 }
 
 .mark {

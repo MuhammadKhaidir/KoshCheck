@@ -41,6 +41,7 @@ src/
 ## Mengembangkan
 
 - **Ganti tema**: ubah nilai di `src/styles/tokens.css`. Semua komponen memakai variabel di sana.
+- **Tema galaksi**: aktif lewat `<html data-theme="galaksi">` di `index.html`. Palet dan atmosfernya (nebula, bintang, siluet kos) ada di `src/styles/galaksi.css`, bintangnya di `src/styles/galaksi/*.svg`. Hapus atribut `data-theme` untuk kembali ke tema terang.
 - **Tambah section**: buat komponen di `src/components/sections/`, pakai `<Section>` dan `<SectionHead>`, lalu daftarkan di `App.jsx`.
 - **Tambah halaman** (misalnya detail kos atau laporan survei lengkap): pasang `react-router-dom`, lalu pindahkan isi `App.jsx` menjadi satu route.
 - **Katalog dari backend**: ganti import `kos` di `Catalog.jsx` dengan hasil fetch. Bentuk objeknya sudah dipisah di `data/kos.js`.

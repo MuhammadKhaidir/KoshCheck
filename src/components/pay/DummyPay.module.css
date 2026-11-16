@@ -6,12 +6,12 @@
   overflow: auto;
   background: var(--white);
   color: var(--ink);
-  border: 2px solid var(--ink);
+  border: 2px solid var(--edge);
   border-radius: var(--radius-m);
 }
 
 .dialog::backdrop {
-  background: rgba(14, 47, 51, 0.65);
+  background: var(--scrim);
 }
 
 .body {

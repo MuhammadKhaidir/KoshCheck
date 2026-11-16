@@ -1,5 +1,5 @@
 .list {
-  border-top: 2px solid var(--ink);
+  border-top: 2px solid var(--edge);
 }
 
 .row {
@@ -34,7 +34,7 @@
   margin-top: 0.1rem;
   border-radius: 50%;
   background: var(--marker);
-  color: var(--ink);
+  color: var(--on-marker);
 }
 
 @media (min-width: 52rem) {

@@ -24,10 +24,11 @@
   width: min(32vw, 30rem);
   height: clamp(3.5rem, 8vw, 7rem);
   pointer-events: none;
+  filter: var(--rim-glow);
 }
 
 .waveFill {
-  fill: var(--ink);
+  fill: var(--band);
 }
 
 .waveLine {
@@ -93,13 +94,13 @@
 
 .boxFrame {
   fill: var(--marker);
-  stroke: var(--ink);
+  stroke: var(--on-marker);
   stroke-width: 5;
 }
 
 .tick {
   fill: none;
-  stroke: var(--ink);
+  stroke: var(--on-marker);
   stroke-width: 9;
   stroke-linecap: round;
   stroke-linejoin: round;

@@ -1,10 +1,10 @@
 .footer {
-  --muted: var(--on-ink-mute);
-  --line: rgba(244, 247, 245, 0.22);
+  --muted: var(--on-band-mute);
+  --line: var(--band-line);
   --focus: var(--marker);
   padding-block: var(--space-8) var(--space-6);
-  background: var(--ink);
-  color: var(--paper);
+  background: var(--band);
+  color: var(--on-band);
 }
 
 .top {
