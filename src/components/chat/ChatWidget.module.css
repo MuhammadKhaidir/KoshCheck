@@ -69,7 +69,7 @@
 }
 
 .launcher:hover {
-  background: var(--ink-hover);
+  background: var(--ink-soft);
 }
 
 .panel {

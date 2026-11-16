@@ -34,8 +34,8 @@
 }
 
 .primary:hover {
-  background: var(--ink-hover);
-  border-color: var(--ink-hover);
+  background: var(--ink-soft);
+  border-color: var(--ink-soft);
 }
 
 .secondary {
