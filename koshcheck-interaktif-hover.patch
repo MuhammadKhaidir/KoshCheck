@@ -1,0 +1,1007 @@
+diff --git a/src/components/chat/ChatWidget.module.css b/src/components/chat/ChatWidget.module.css
+index 20c4cd1..d9876ca 100644
+--- a/src/components/chat/ChatWidget.module.css
++++ b/src/components/chat/ChatWidget.module.css
+@@ -282,3 +282,28 @@
+   font-size: 0.875rem;
+   font-weight: 600;
+ }
++
++/* ---- Animasi hover tombol chat ---- */
++.launcher {
++  transition:
++    background-color 0.15s ease,
++    transform 0.2s ease;
++}
++
++.launcher svg {
++  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
++}
++
++@media (hover: hover) and (prefers-reduced-motion: no-preference) {
++  .launcher:hover {
++    transform: translateY(-3px) scale(1.03);
++  }
++
++  .launcher:active {
++    transform: scale(0.98);
++  }
++
++  .launcher:hover svg {
++    transform: rotate(-12deg) scale(1.1);
++  }
++}
+diff --git a/src/components/layout/Footer.module.css b/src/components/layout/Footer.module.css
+index a2ff619..412feb1 100644
+--- a/src/components/layout/Footer.module.css
++++ b/src/components/layout/Footer.module.css
+@@ -68,3 +68,14 @@
+     gap: var(--space-5);
+   }
+ }
++
++/* ---- Animasi hover ---- */
++.link {
++  transition: transform 0.2s ease;
++}
++
++@media (hover: hover) and (prefers-reduced-motion: no-preference) {
++  .link:hover {
++    transform: translateX(4px);
++  }
++}
+diff --git a/src/components/layout/Header.module.css b/src/components/layout/Header.module.css
+index ae0526b..5be859f 100644
+--- a/src/components/layout/Header.module.css
++++ b/src/components/layout/Header.module.css
+@@ -132,11 +132,27 @@
+     font-weight: 500;
+   }
+ 
+-  .link:hover {
+-    text-decoration: underline;
+-    text-decoration-color: var(--marker-deep);
+-    text-decoration-thickness: 3px;
+-    text-underline-offset: 6px;
++  /* Hover: garis kuning menyapu dari kiri ke kanan */
++  .link::before {
++    content: '';
++    position: absolute;
++    left: 0;
++    right: 0;
++    bottom: -0.3rem;
++    height: 3px;
++    border-radius: 2px;
++    background: var(--marker-deep);
++    transform: scaleX(0);
++    transform-origin: left;
++    transition: transform 0.25s ease;
++  }
++
++  .link:hover::before {
++    transform: scaleX(1);
++  }
++
++  .link[aria-current='location']::before {
++    display: none;
+   }
+ 
+   /* Menu aktif: tebal dengan garis di bawahnya */
+@@ -160,3 +176,17 @@
+     display: none;
+   }
+ }
++
++.toggle {
++  transition: background-color 0.15s ease;
++}
++
++.toggle:hover {
++  background: var(--paper-sunk);
++}
++
++@media (prefers-reduced-motion: reduce) {
++  .link::before {
++    transition: none;
++  }
++}
+diff --git a/src/components/sections/Catalog.module.css b/src/components/sections/Catalog.module.css
+index a46cd28..271de59 100644
+--- a/src/components/sections/Catalog.module.css
++++ b/src/components/sections/Catalog.module.css
+@@ -109,3 +109,39 @@
+   font-size: var(--step--1);
+   color: var(--muted);
+ }
++
++/* ---- Animasi hover ---- */
++.toolbar {
++  transition: border-color 0.25s ease;
++}
++
++.chip {
++  transition:
++    background-color 0.15s ease,
++    color 0.15s ease,
++    transform 0.2s ease;
++}
++
++.check input {
++  transition: transform 0.2s ease;
++}
++
++@media (hover: hover) {
++  .toolbar:hover {
++    border-color: var(--ink-soft);
++  }
++}
++
++@media (hover: hover) and (prefers-reduced-motion: no-preference) {
++  .chip:hover {
++    transform: translateY(-2px);
++  }
++
++  .chip:active {
++    transform: translateY(1px);
++  }
++
++  .check:hover input {
++    transform: scale(1.2);
++  }
++}
+diff --git a/src/components/sections/Faq.module.css b/src/components/sections/Faq.module.css
+index bcdefec..1df3610 100644
+--- a/src/components/sections/Faq.module.css
++++ b/src/components/sections/Faq.module.css
+@@ -54,3 +54,24 @@
+   padding-bottom: var(--space-5);
+   color: var(--ink-soft);
+ }
++
++/* ---- Animasi hover ---- */
++.item {
++  transition: border-color 0.25s ease;
++}
++
++.summary::after {
++  transition: transform 0.3s ease;
++}
++
++@media (hover: hover) {
++  .item:hover {
++    border-top-color: var(--ink);
++  }
++}
++
++@media (hover: hover) and (prefers-reduced-motion: no-preference) {
++  .summary:hover::after {
++    transform: rotate(90deg) scale(1.2);
++  }
++}
+diff --git a/src/components/sections/Hero.module.css b/src/components/sections/Hero.module.css
+index e94b6b1..e937990 100644
+--- a/src/components/sections/Hero.module.css
++++ b/src/components/sections/Hero.module.css
+@@ -217,3 +217,57 @@
+   font-size: var(--step--1);
+   color: var(--muted);
+ }
++
++/* ---- Animasi hover ---- */
++.badge {
++  transition:
++    transform 0.3s ease,
++    background-color 0.25s ease;
++}
++
++.badgeIcon,
++.featureIcon,
++.box {
++  transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
++}
++
++.feature {
++  transition: transform 0.25s ease;
++}
++
++.swoosh {
++  transform-origin: left center;
++  transition: transform 0.35s ease;
++}
++
++@media (hover: hover) {
++  .badge:hover {
++    background: color-mix(in srgb, var(--marker) 35%, var(--ok-bg));
++  }
++}
++
++@media (hover: hover) and (prefers-reduced-motion: no-preference) {
++  .badge:hover {
++    transform: translateY(-2px);
++  }
++
++  .badge:hover .badgeIcon {
++    transform: rotate(72deg) scale(1.25);
++  }
++
++  .feature:hover {
++    transform: translateY(-3px);
++  }
++
++  .feature:hover .featureIcon {
++    transform: rotate(-8deg) scale(1.15);
++  }
++
++  .box:hover {
++    transform: rotate(-10deg) scale(1.08);
++  }
++
++  .emph:hover .swoosh {
++    transform: scaleY(1.6) rotate(-1.2deg);
++  }
++}
+diff --git a/src/components/sections/KosItem.jsx b/src/components/sections/KosItem.jsx
+index 8887114..2932dc2 100644
+--- a/src/components/sections/KosItem.jsx
++++ b/src/components/sections/KosItem.jsx
+@@ -1,51 +1,118 @@
++import { useState } from 'react'
+ import Icon from '../ui/Icon.jsx'
+ import OrderButton from '../ui/OrderButton.jsx'
++import { FASILITAS } from '../../data/kos.js'
+ import { rupiah, tanggal } from '../../lib/format.js'
+ import s from './KosItem.module.css'
+ 
+-/** Satu baris kos di katalog. Bentuk props mengikuti objek di src/data/kos.js. */
++/**
++ * Satu baris kos di katalog. Bentuk props mengikuti objek di src/data/kos.js.
++ * Seluruh kartu bisa diklik untuk membuka/menutup detail (tombol aslinya ada di judul, kartu ini
++ * memakai pola "stretched click target" supaya tombol "Pesan survei" tetap bisa diklik sendiri).
++ */
+ export default function KosItem({ kos }) {
+-  const { nama, area, tipe, harga, fasilitas, verified, dicekPada, foto } = kos
++  const { id, nama, area, tipe, harga, fasilitas, verified, dicekPada, foto } = kos
++  const [open, setOpen] = useState(false)
++  const panelId = `detail-${id}`
+ 
+   return (
+-    <li className={s.item}>
+-      <div className={s.photo}>
+-        {foto ? <img src={foto} alt="" loading="lazy" /> : <Icon name="home" size={30} />}
+-      </div>
++    <li className={`${s.item} ${open ? s.open : ''}`}>
++      <div className={s.row}>
++        <div className={s.photo}>
++          {foto ? <img src={foto} alt="" loading="lazy" /> : <Icon name="home" size={30} />}
++        </div>
+ 
+-      <div className={s.info}>
+-        <h3 className={s.name}>{nama}</h3>
+-        <p className={s.meta}>
+-          {area}, kos {tipe.toLowerCase()}
+-        </p>
+-        <ul className={s.tags}>
+-          {fasilitas.map((f) => (
+-            <li key={f}>{f}</li>
+-          ))}
+-        </ul>
+-      </div>
++        <div className={s.info}>
++          <h3 className={s.name}>
++            <button
++              type="button"
++              className={s.toggle}
++              aria-expanded={open}
++              aria-controls={panelId}
++              onClick={() => setOpen((o) => !o)}
++            >
++              {nama}
++              <span className={s.chevron} aria-hidden="true">
++                <Icon name="arrow" size={18} />
++              </span>
++            </button>
++          </h3>
++          <p className={s.meta}>
++            {area}, kos {tipe.toLowerCase()}
++          </p>
++          <ul className={s.tags}>
++            {fasilitas.map((f) => (
++              <li key={f}>{f}</li>
++            ))}
++          </ul>
++        </div>
+ 
+-      <div className={s.side}>
+-        <p className={s.price}>
+-          <strong>{rupiah(harga)}</strong>
+-          <span className={s.unit}> per bulan</span>
+-        </p>
+-        {verified ? (
+-          <p className={s.verified}>
+-            <span className={s.verifiedTitle}>
+-              <Icon name="check" size={16} />
+-              Terverifikasi
+-            </span>
+-            <span className={s.date}>Diperiksa {tanggal(dicekPada)}</span>
++        <div className={s.side}>
++          <p className={s.price}>
++            <strong>{rupiah(harga)}</strong>
++            <span className={s.unit}> per bulan</span>
+           </p>
+-        ) : (
+-          <>
+-            <p className={s.unchecked}>Belum disurvei</p>
+-            <OrderButton intent={{ mode: 'survei', kos: nama }} variant="secondary" size="sm">
+-              Pesan survei
+-            </OrderButton>
+-          </>
+-        )}
++          {verified ? (
++            <p className={s.verified}>
++              <span className={s.verifiedTitle}>
++                <Icon name="check" size={16} />
++                Terverifikasi
++              </span>
++              <span className={s.date}>Diperiksa {tanggal(dicekPada)}</span>
++            </p>
++          ) : (
++            <>
++              <p className={s.unchecked}>Belum disurvei</p>
++              <OrderButton intent={{ mode: 'survei', kos: nama }} variant="secondary" size="sm" className={s.action}>
++                Pesan survei
++              </OrderButton>
++            </>
++          )}
++        </div>
++      </div>
++
++      {/* Panel detail: tinggi dianimasikan lewat grid-template-rows 0fr -> 1fr. inert = tidak bisa difokus saat tertutup. */}
++      <div id={panelId} className={s.panel} inert={!open}>
++        <div className={s.panelInner}>
++          <div className={s.panelBody}>
++            <dl className={s.details}>
++              <div>
++                <dt>Area</dt>
++                <dd>{area}</dd>
++              </div>
++              <div>
++                <dt>Tipe</dt>
++                <dd>Kos {tipe.toLowerCase()}</dd>
++              </div>
++              <div>
++                <dt>Harga</dt>
++                <dd>{rupiah(harga)} per bulan</dd>
++              </div>
++              <div>
++                <dt>Status</dt>
++                <dd className={verified ? s.okText : undefined}>
++                  {verified ? `Terverifikasi, ${tanggal(dicekPada, true)}` : 'Belum disurvei'}
++                </dd>
++              </div>
++            </dl>
++
++            <div>
++              <p className={s.panelLabel}>Fasilitas</p>
++              <ul className={s.facilities}>
++                {FASILITAS.map((f, i) => {
++                  const has = fasilitas.includes(f)
++                  return (
++                    <li key={f} data-has={has} style={{ '--i': i }}>
++                      <Icon name={has ? 'check' : 'cross'} size={16} />
++                      {f}
++                      {!has && <span className="visually-hidden"> (tidak tersedia)</span>}
++                    </li>
++                  )
++                })}
++              </ul>
++            </div>
++          </div>
++        </div>
+       </div>
+     </li>
+   )
+diff --git a/src/components/sections/KosItem.module.css b/src/components/sections/KosItem.module.css
+index ca9c8f1..29bfb66 100644
+--- a/src/components/sections/KosItem.module.css
++++ b/src/components/sections/KosItem.module.css
+@@ -1,11 +1,20 @@
+ .item {
+-  display: grid;
+-  grid-template-columns: 5rem minmax(0, 1fr);
+-  gap: var(--space-3) var(--space-4);
++  position: relative;
+   padding: var(--space-4);
+   background: var(--white);
+   border: 1px solid var(--line);
+   border-radius: var(--radius-s);
++  transition:
++    transform 0.25s ease,
++    border-color 0.25s ease,
++    box-shadow 0.25s ease;
++}
++
++/* Baris utama (foto, info, harga). Grid-nya dulu ada di .item, dipindah ke sini supaya panel detail bisa di bawahnya. */
++.row {
++  display: grid;
++  grid-template-columns: 5rem minmax(0, 1fr);
++  gap: var(--space-3) var(--space-4);
+ }
+ 
+ .photo {
+@@ -16,12 +25,18 @@
+   background: repeating-linear-gradient(-45deg, var(--paper-sunk) 0 8px, var(--paper) 8px 16px);
+   border-radius: var(--radius-s);
+   color: var(--muted);
++  transition: color 0.25s ease;
+ }
+ 
+ .photo img {
+   width: 100%;
+   height: 100%;
+   object-fit: cover;
++  transition: transform 0.4s ease;
++}
++
++.photo svg {
++  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+ }
+ 
+ .name {
+@@ -30,6 +45,50 @@
+   letter-spacing: -0.01em;
+ }
+ 
++/* Tombol di dalam judul. ::after-nya diregangkan menutupi seluruh kartu, jadi klik di mana saja membuka detail. */
++.toggle {
++  appearance: none;
++  padding: 0;
++  background: none;
++  border: 0;
++  font: inherit;
++  letter-spacing: inherit;
++  text-align: left;
++  cursor: pointer;
++}
++
++.toggle::after {
++  content: '';
++  position: absolute;
++  inset: 0;
++  border-radius: var(--radius-s);
++}
++
++/* Outline fokus dipasang di seluruh kartu, bukan hanya di teks judul */
++.toggle:focus-visible {
++  outline: none;
++}
++
++.toggle:focus-visible::after {
++  outline: 3px solid var(--focus);
++  outline-offset: 3px;
++}
++
++/* Panah: menunjuk ke bawah saat tertutup, ke atas saat terbuka */
++.chevron {
++  display: inline-grid;
++  margin-left: var(--space-1);
++  vertical-align: middle;
++  transform: rotate(90deg);
++  transition:
++    transform 0.35s cubic-bezier(0.65, 0, 0.35, 1),
++    scale 0.25s ease;
++}
++
++.open .chevron {
++  transform: rotate(-90deg);
++}
++
+ .meta {
+   margin-top: 0.1rem;
+   color: var(--muted);
+@@ -48,6 +107,7 @@
+   background: var(--paper-sunk);
+   border-radius: var(--radius-s);
+   font-size: var(--step--1);
++  transition: background-color 0.25s ease;
+ }
+ 
+ .side {
+@@ -59,6 +119,12 @@
+   border-top: 1px solid var(--line);
+ }
+ 
++/* Tombol "Pesan survei" harus di atas lapisan klik kartu */
++.action {
++  position: relative;
++  z-index: 1;
++}
++
+ .price {
+   color: var(--muted);
+   font-size: var(--step--1);
+@@ -94,8 +160,154 @@
+   font-size: var(--step--1);
+ }
+ 
++/* ---- Panel detail (buka/tutup) ---- */
++.panel {
++  position: relative;
++  z-index: 1;
++  display: grid;
++  grid-template-rows: 0fr;
++  cursor: default;
++  transition: grid-template-rows 0.4s cubic-bezier(0.65, 0, 0.35, 1);
++}
++
++.open .panel {
++  grid-template-rows: 1fr;
++}
++
++.panelInner {
++  min-height: 0;
++  overflow: hidden;
++}
++
++.panelBody {
++  display: grid;
++  gap: var(--space-4);
++  margin-top: var(--space-4);
++  padding-top: var(--space-4);
++  border-top: 1px solid var(--line);
++  opacity: 0;
++  transform: translateY(-0.5rem);
++  transition:
++    opacity 0.3s ease,
++    transform 0.3s ease;
++}
++
++.open .panelBody {
++  opacity: 1;
++  transform: none;
++  transition-delay: 0.1s;
++}
++
++.details {
++  display: grid;
++  grid-template-columns: repeat(2, minmax(0, 1fr));
++  gap: var(--space-3) var(--space-4);
++}
++
++.details dt,
++.panelLabel {
++  color: var(--muted);
++  font-size: var(--step--1);
++}
++
++.panelLabel {
++  margin-bottom: var(--space-2);
++}
++
++.okText {
++  color: var(--ok);
++}
++
++.facilities {
++  display: flex;
++  flex-wrap: wrap;
++  gap: var(--space-2);
++}
++
++.facilities li {
++  display: inline-flex;
++  align-items: center;
++  gap: var(--space-1);
++  padding: 0.25rem 0.7rem 0.25rem 0.5rem;
++  background: var(--ok-bg);
++  border-radius: var(--radius-pill);
++  color: var(--ok);
++  font-size: var(--step--1);
++  transition: transform 0.2s ease;
++}
++
++.facilities li[data-has='false'] {
++  background: var(--paper-sunk);
++  color: var(--muted);
++  text-decoration: line-through;
++}
++
++/* Chip fasilitas muncul bergiliran saat panel dibuka */
++.open .facilities li {
++  animation: chipIn 0.35s ease backwards;
++  animation-delay: calc(0.15s + var(--i) * 0.06s);
++}
++
++@keyframes chipIn {
++  from {
++    opacity: 0;
++    transform: translateY(0.4rem);
++  }
++}
++
++/* ---- Hover dan terbuka ---- */
++.item:hover,
++.open {
++  border-color: var(--ink);
++  box-shadow: var(--shadow-sheet);
++}
++
++@media (hover: hover) {
++  .item:hover .photo {
++    color: var(--ink);
++  }
++
++  .item:hover .tags li {
++    background: color-mix(in srgb, var(--marker) 55%, var(--paper-sunk));
++  }
++}
++
++@media (hover: hover) and (prefers-reduced-motion: no-preference) {
++  .item:hover {
++    transform: translateY(-3px);
++  }
++
++  .item:hover .photo svg {
++    transform: scale(1.18) rotate(-6deg);
++  }
++
++  .item:hover .photo img {
++    transform: scale(1.08);
++  }
++
++  .item:hover .chevron {
++    scale: 1.2;
++  }
++
++  .facilities li:hover {
++    transform: translateY(-2px);
++  }
++}
++
++@media (prefers-reduced-motion: reduce) {
++  .panel,
++  .panelBody,
++  .chevron {
++    transition: none;
++  }
++
++  .open .facilities li {
++    animation: none;
++  }
++}
++
+ @media (min-width: 44rem) {
+-  .item {
++  .row {
+     grid-template-columns: 6.5rem minmax(0, 1fr) 13rem;
+     align-items: center;
+     gap: var(--space-5);
+@@ -113,4 +325,8 @@
+     display: block;
+     white-space: nowrap;
+   }
++
++  .details {
++    grid-template-columns: repeat(4, minmax(0, 1fr));
++  }
+ }
+diff --git a/src/components/sections/Order.module.css b/src/components/sections/Order.module.css
+index 5236e3f..05c9bbb 100644
+--- a/src/components/sections/Order.module.css
++++ b/src/components/sections/Order.module.css
+@@ -138,3 +138,33 @@
+   border-radius: var(--radius-s);
+   overflow-wrap: anywhere;
+ }
++
++/* ---- Animasi hover ---- */
++.mode {
++  transition:
++    background-color 0.15s ease,
++    color 0.15s ease;
++}
++
++.field input,
++.field select,
++.field textarea {
++  transition: border-color 0.2s ease;
++}
++
++.preview {
++  transition: border-color 0.2s ease;
++}
++
++@media (hover: hover) {
++  .mode:not([aria-pressed='true']):hover {
++    background: var(--white);
++  }
++
++  .field input:hover,
++  .field select:hover,
++  .field textarea:hover,
++  .preview:hover {
++    border-color: var(--ink);
++  }
++}
+diff --git a/src/components/sections/Owners.module.css b/src/components/sections/Owners.module.css
+index d55e2b9..d42500e 100644
+--- a/src/components/sections/Owners.module.css
++++ b/src/components/sections/Owners.module.css
+@@ -55,3 +55,30 @@
+   margin-top: var(--space-2);
+   color: var(--muted);
+ }
++
++/* ---- Animasi hover ---- */
++.offer {
++  transition:
++    transform 0.3s ease,
++    border-color 0.25s ease;
++}
++
++.offerTitle {
++  transition: color 0.25s ease;
++}
++
++@media (hover: hover) {
++  .offer:hover {
++    border-bottom-color: var(--marker);
++  }
++
++  .offer:hover .offerTitle {
++    color: var(--marker);
++  }
++}
++
++@media (hover: hover) and (prefers-reduced-motion: no-preference) {
++  .offer:hover {
++    transform: translateX(10px);
++  }
++}
+diff --git a/src/components/sections/Plans.module.css b/src/components/sections/Plans.module.css
+index 6c5c4b0..5de545b 100644
+--- a/src/components/sections/Plans.module.css
++++ b/src/components/sections/Plans.module.css
+@@ -142,3 +142,54 @@
+ .cta {
+   width: 100%;
+ }
++
++/* ---- Animasi hover ---- */
++.plan {
++  transition:
++    transform 0.3s ease,
++    box-shadow 0.3s ease;
++}
++
++.price {
++  transform-origin: left center;
++  transition: transform 0.3s ease;
++}
++
++.includes li {
++  transition: transform 0.25s ease;
++}
++
++.fill {
++  transform-origin: left center;
++  transition:
++    transform 0.25s ease,
++    filter 0.25s ease;
++}
++
++@media (hover: hover) {
++  .plan:hover {
++    box-shadow: var(--shadow-sheet);
++  }
++
++  .bars li:hover .fill {
++    filter: brightness(1.12);
++  }
++}
++
++@media (hover: hover) and (prefers-reduced-motion: no-preference) {
++  .plan:hover {
++    transform: translateY(-6px);
++  }
++
++  .plan:hover .price {
++    transform: scale(1.05);
++  }
++
++  .includes li:hover {
++    transform: translateX(4px);
++  }
++
++  .bars li:hover .fill {
++    transform: scaleY(1.25);
++  }
++}
+diff --git a/src/components/sections/Problems.module.css b/src/components/sections/Problems.module.css
+index 88038f5..e106f15 100644
+--- a/src/components/sections/Problems.module.css
++++ b/src/components/sections/Problems.module.css
+@@ -44,3 +44,30 @@
+     align-items: start;
+   }
+ }
++
++/* ---- Animasi hover ---- */
++.worry {
++  transition:
++    color 0.25s ease,
++    transform 0.3s ease;
++}
++
++.tick {
++  transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
++}
++
++@media (hover: hover) {
++  .row:hover .worry {
++    color: var(--ink);
++  }
++}
++
++@media (hover: hover) and (prefers-reduced-motion: no-preference) {
++  .row:hover .worry {
++    transform: translateX(8px);
++  }
++
++  .row:hover .tick {
++    transform: scale(1.2) rotate(-10deg);
++  }
++}
+diff --git a/src/components/sections/Steps.module.css b/src/components/sections/Steps.module.css
+index 1b59fde..20a230d 100644
+--- a/src/components/sections/Steps.module.css
++++ b/src/components/sections/Steps.module.css
+@@ -79,3 +79,40 @@
+     margin-top: var(--space-2);
+   }
+ }
++
++/* ---- Animasi hover ---- */
++.num {
++  transition:
++    transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1),
++    background-color 0.25s ease,
++    color 0.25s ease;
++}
++
++.title {
++  transition: transform 0.3s ease;
++}
++
++.step:not(:last-child)::after {
++  transition: opacity 0.25s ease;
++}
++
++@media (hover: hover) {
++  .step:hover .num {
++    background: var(--marker);
++    color: var(--ink);
++  }
++
++  .step:not(:last-child):hover::after {
++    opacity: 1;
++  }
++}
++
++@media (hover: hover) and (prefers-reduced-motion: no-preference) {
++  .step:hover .num {
++    transform: scale(1.15) rotate(-8deg);
++  }
++
++  .step:hover .title {
++    transform: translateX(4px);
++  }
++}
+diff --git a/src/components/sections/SurveyReport.module.css b/src/components/sections/SurveyReport.module.css
+index 9b3d977..2d4145b 100644
+--- a/src/components/sections/SurveyReport.module.css
++++ b/src/components/sections/SurveyReport.module.css
+@@ -293,3 +293,56 @@
+     padding: var(--space-4) var(--space-4) 7rem;
+   }
+ }
++
++/* ---- Animasi hover ---- */
++.wrap {
++  transition: transform 0.3s ease;
++}
++
++.tab {
++  transition:
++    color 0.15s ease,
++    background-color 0.15s ease,
++    transform 0.2s ease;
++}
++
++.table tbody tr {
++  transition: background-color 0.2s ease;
++}
++
++.statusIcon {
++  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
++}
++
++.stamp {
++  transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
++}
++
++@media (hover: hover) {
++  .tab:not([aria-selected='true']):hover {
++    background: var(--paper);
++  }
++
++  .table tbody tr:hover {
++    background: color-mix(in srgb, var(--marker) 14%, transparent);
++  }
++}
++
++@media (hover: hover) and (prefers-reduced-motion: no-preference) {
++  /* Seluruh figur (tab + lembar) terangkat bersama supaya tab tidak lepas dari lembar */
++  .wrap:hover {
++    transform: translateY(-4px);
++  }
++
++  .tab:not([aria-selected='true']):hover {
++    transform: translateY(-2px);
++  }
++
++  .table tbody tr:hover .statusIcon {
++    transform: scale(1.2);
++  }
++
++  .sheet:hover .stamp {
++    transform: rotate(-3deg) scale(1.06);
++  }
++}
+diff --git a/src/components/ui/Button.module.css b/src/components/ui/Button.module.css
+index 3a94819..20f6b08 100644
+--- a/src/components/ui/Button.module.css
++++ b/src/components/ui/Button.module.css
+@@ -17,7 +17,8 @@
+   transition:
+     background-color 0.15s ease,
+     color 0.15s ease,
+-    border-color 0.15s ease;
++    border-color 0.15s ease,
++    transform 0.2s ease;
+ }
+ 
+ .sm {
+@@ -74,3 +75,14 @@
+   opacity: 0.6;
+   cursor: progress;
+ }
++
++/* Hover: tombol terangkat sedikit, turun saat ditekan. Mati di layar sentuh dan bila gerakan dikurangi. */
++@media (hover: hover) and (prefers-reduced-motion: no-preference) {
++  .btn:not(:disabled):hover {
++    transform: translateY(-2px);
++  }
++
++  .btn:not(:disabled):active {
++    transform: translateY(1px);
++  }
++}
+diff --git a/src/components/ui/Logo.module.css b/src/components/ui/Logo.module.css
+index cd8f38e..fc05735 100644
+--- a/src/components/ui/Logo.module.css
++++ b/src/components/ui/Logo.module.css
+@@ -36,3 +36,14 @@
+   letter-spacing: -0.01em;
+   line-height: 1;
+ }
++
++/* Hover: ikon logo miring sedikit dan membesar */
++.mark {
++  transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
++}
++
++@media (hover: hover) and (prefers-reduced-motion: no-preference) {
++  .logo:hover .mark {
++    transform: rotate(-10deg) scale(1.1);
++  }
++}

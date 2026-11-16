@@ -142,3 +142,54 @@
 .cta {
   width: 100%;
 }
+
+/* ---- Animasi hover ---- */
+.plan {
+  transition:
+    transform 0.3s ease,
+    box-shadow 0.3s ease;
+}
+
+.price {
+  transform-origin: left center;
+  transition: transform 0.3s ease;
+}
+
+.includes li {
+  transition: transform 0.25s ease;
+}
+
+.fill {
+  transform-origin: left center;
+  transition:
+    transform 0.25s ease,
+    filter 0.25s ease;
+}
+
+@media (hover: hover) {
+  .plan:hover {
+    box-shadow: var(--shadow-sheet);
+  }
+
+  .bars li:hover .fill {
+    filter: brightness(1.12);
+  }
+}
+
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  .plan:hover {
+    transform: translateY(-6px);
+  }
+
+  .plan:hover .price {
+    transform: scale(1.05);
+  }
+
+  .includes li:hover {
+    transform: translateX(4px);
+  }
+
+  .bars li:hover .fill {
+    transform: scaleY(1.25);
+  }
+}

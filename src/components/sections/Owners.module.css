@@ -55,3 +55,30 @@
   margin-top: var(--space-2);
   color: var(--muted);
 }
+
+/* ---- Animasi hover ---- */
+.offer {
+  transition:
+    transform 0.3s ease,
+    border-color 0.25s ease;
+}
+
+.offerTitle {
+  transition: color 0.25s ease;
+}
+
+@media (hover: hover) {
+  .offer:hover {
+    border-bottom-color: var(--marker);
+  }
+
+  .offer:hover .offerTitle {
+    color: var(--marker);
+  }
+}
+
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  .offer:hover {
+    transform: translateX(10px);
+  }
+}

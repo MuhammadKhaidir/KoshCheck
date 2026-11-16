@@ -217,3 +217,57 @@
   font-size: var(--step--1);
   color: var(--muted);
 }
+
+/* ---- Animasi hover ---- */
+.badge {
+  transition:
+    transform 0.3s ease,
+    background-color 0.25s ease;
+}
+
+.badgeIcon,
+.featureIcon,
+.box {
+  transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.feature {
+  transition: transform 0.25s ease;
+}
+
+.swoosh {
+  transform-origin: left center;
+  transition: transform 0.35s ease;
+}
+
+@media (hover: hover) {
+  .badge:hover {
+    background: color-mix(in srgb, var(--marker) 35%, var(--ok-bg));
+  }
+}
+
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  .badge:hover {
+    transform: translateY(-2px);
+  }
+
+  .badge:hover .badgeIcon {
+    transform: rotate(72deg) scale(1.25);
+  }
+
+  .feature:hover {
+    transform: translateY(-3px);
+  }
+
+  .feature:hover .featureIcon {
+    transform: rotate(-8deg) scale(1.15);
+  }
+
+  .box:hover {
+    transform: rotate(-10deg) scale(1.08);
+  }
+
+  .emph:hover .swoosh {
+    transform: scaleY(1.6) rotate(-1.2deg);
+  }
+}

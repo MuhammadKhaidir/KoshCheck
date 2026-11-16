@@ -17,7 +17,8 @@
   transition:
     background-color 0.15s ease,
     color 0.15s ease,
-    border-color 0.15s ease;
+    border-color 0.15s ease,
+    transform 0.2s ease;
 }
 
 .sm {
@@ -73,4 +74,15 @@
 .btn:disabled {
   opacity: 0.6;
   cursor: progress;
+}
+
+/* Hover: tombol terangkat sedikit, turun saat ditekan. Mati di layar sentuh dan bila gerakan dikurangi. */
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  .btn:not(:disabled):hover {
+    transform: translateY(-2px);
+  }
+
+  .btn:not(:disabled):active {
+    transform: translateY(1px);
+  }
 }

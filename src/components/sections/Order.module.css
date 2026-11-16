@@ -138,3 +138,33 @@
   border-radius: var(--radius-s);
   overflow-wrap: anywhere;
 }
+
+/* ---- Animasi hover ---- */
+.mode {
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.field input,
+.field select,
+.field textarea {
+  transition: border-color 0.2s ease;
+}
+
+.preview {
+  transition: border-color 0.2s ease;
+}
+
+@media (hover: hover) {
+  .mode:not([aria-pressed='true']):hover {
+    background: var(--white);
+  }
+
+  .field input:hover,
+  .field select:hover,
+  .field textarea:hover,
+  .preview:hover {
+    border-color: var(--ink);
+  }
+}

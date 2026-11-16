@@ -54,3 +54,24 @@
   padding-bottom: var(--space-5);
   color: var(--ink-soft);
 }
+
+/* ---- Animasi hover ---- */
+.item {
+  transition: border-color 0.25s ease;
+}
+
+.summary::after {
+  transition: transform 0.3s ease;
+}
+
+@media (hover: hover) {
+  .item:hover {
+    border-top-color: var(--ink);
+  }
+}
+
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  .summary:hover::after {
+    transform: rotate(90deg) scale(1.2);
+  }
+}

@@ -79,3 +79,40 @@
     margin-top: var(--space-2);
   }
 }
+
+/* ---- Animasi hover ---- */
+.num {
+  transition:
+    transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1),
+    background-color 0.25s ease,
+    color 0.25s ease;
+}
+
+.title {
+  transition: transform 0.3s ease;
+}
+
+.step:not(:last-child)::after {
+  transition: opacity 0.25s ease;
+}
+
+@media (hover: hover) {
+  .step:hover .num {
+    background: var(--marker);
+    color: var(--ink);
+  }
+
+  .step:not(:last-child):hover::after {
+    opacity: 1;
+  }
+}
+
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  .step:hover .num {
+    transform: scale(1.15) rotate(-8deg);
+  }
+
+  .step:hover .title {
+    transform: translateX(4px);
+  }
+}
