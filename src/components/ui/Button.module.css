@@ -41,7 +41,7 @@
 .secondary {
   background: transparent;
   border-color: var(--ink);
-  color: var(--ink);
+  color: var(--text);
 }
 
 .secondary:hover {
@@ -52,7 +52,7 @@
 .marker {
   background: var(--marker);
   border-color: var(--marker);
-  color: var(--ink);
+  color: var(--text);
 }
 
 .marker:hover {
@@ -68,7 +68,7 @@
 
 .ghostLight:hover {
   background: var(--paper);
-  color: var(--ink);
+  color: var(--text);
 }
 
 .btn:disabled {

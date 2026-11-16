@@ -19,7 +19,7 @@
   border: 1px solid var(--line);
   border-radius: 1rem;
   box-shadow: var(--shadow-sheet);
-  color: var(--ink);
+  color: var(--text);
   font-size: var(--step--1);
   font-weight: 600;
   line-height: 1.35;

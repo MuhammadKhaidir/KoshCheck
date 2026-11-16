@@ -6,12 +6,12 @@
 /* Terang dan "sunk" sengaja tembus pandang supaya background utama (base.css) terlihat */
 .paper {
   background: transparent;
-  color: var(--ink);
+  color: var(--text);
 }
 
 .sunk {
   background: color-mix(in srgb, var(--paper-sunk) 72%, transparent);
-  color: var(--ink);
+  color: var(--text);
   --line: #c3d1ca;
 }
 

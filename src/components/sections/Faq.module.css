@@ -52,7 +52,7 @@
 .answer {
   max-width: 40rem;
   padding-bottom: var(--space-5);
-  color: var(--ink-soft);
+  color: var(--text);
 }
 
 /* ---- Animasi hover ---- */

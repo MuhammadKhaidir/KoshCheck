@@ -5,7 +5,7 @@
   padding: 0;
   overflow: auto;
   background: var(--white);
-  color: var(--ink);
+  color: var(--text);
   border: 2px solid var(--ink);
   border-radius: var(--radius-m);
 }

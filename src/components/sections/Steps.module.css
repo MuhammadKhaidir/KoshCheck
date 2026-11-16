@@ -48,7 +48,7 @@
 
 .body {
   grid-column: 2;
-  color: var(--ink-soft);
+  color: var(--text);
 }
 
 @media (min-width: 56rem) {
@@ -99,7 +99,7 @@
 @media (hover: hover) {
   .step:hover .num {
     background: var(--marker);
-    color: var(--ink);
+    color: var(--text);
   }
 
   .step:not(:last-child):hover::after {

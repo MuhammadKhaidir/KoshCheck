@@ -47,7 +47,7 @@
 }
 
 .tab:hover {
-  color: var(--ink);
+  color: var(--text);
 }
 
 /* Tab aktif berwarna hijau tua, menyatu dengan tepi atas lembar */
@@ -213,7 +213,7 @@
 .note {
   margin-top: 0.25rem;
   font-size: var(--step--1);
-  color: var(--ink-soft);
+  color: var(--text);
 }
 
 .stamp {
