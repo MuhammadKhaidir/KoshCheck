@@ -47,7 +47,7 @@ export const plans = {
         {
       id: 'free',
       name: 'Gratis',
-      price: FREE,
+      price: 0,
       summary: 'Untuk mengetahui kos yang tersedia di website kami serta didaerah Palembang.',
       includes: [
         'Foto Luar Kos',
