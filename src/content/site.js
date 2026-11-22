@@ -44,6 +44,17 @@ export const plans = {
   title: 'Survei dari rumah lebih murah daripada berangkat sendiri.',
   lede: 'Katalog gratis untuk semua orang. Layanan Check Kost berbayar untuk kos yang benar-benar kamu taksir.',
   items: [
+        {
+      id: 'free',
+      name: 'Gratis',
+      price: FREE,
+      summary: 'Untuk mengetahui kos yang tersedia di website kami serta didaerah Palembang.',
+      includes: [
+        'Foto Luar Kos',
+        'Contact Person',
+        'Daftar Fasilitas yang Tersedia (Belum Terverifikasi)',
+      ],
+    },
     {
       id: 'dasar',
       name: 'Cek Dasar',
