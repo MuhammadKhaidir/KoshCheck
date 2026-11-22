@@ -64,6 +64,11 @@ export default function Header() {
                 </a>
               </li>
             ))}
+            <li>
+              <a className={s.link} href="#/masuk" onClick={close}>
+                Masuk
+              </a>
+            </li>
             <li className={s.mobileCta}>
               <OrderButton intent={{ mode: 'survei' }} onClick={close}>
                 Pesan survei

@@ -136,11 +136,10 @@ export default function AdminPage() {
         {state === 'nologin' && (
           <div className={s.notice}>
             <p>
-              Sesi admin tidak ada atau sudah habis. Buka chat KOSCHECK di pojok kanan bawah halaman utama, ketik
-              &ldquo;buka database&rdquo;, lalu masukkan password admin.
+              Sesi admin tidak ada atau sudah habis. Silakan masuk lagi.
             </p>
-            <Button as="a" href="#top">
-              Ke halaman utama
+            <Button as="a" href="#/masuk">
+              Masuk
             </Button>
           </div>
         )}

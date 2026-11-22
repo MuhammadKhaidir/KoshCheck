@@ -12,23 +12,26 @@ import Faq from './components/sections/Faq.jsx'
 import Order from './components/sections/Order.jsx'
 import ChatWidget from './components/chat/ChatWidget.jsx'
 import AdminPage from './pages/AdminPage.jsx'
+import OwnerPage from './pages/OwnerPage.jsx'
+import LoginPage from './pages/LoginPage.jsx'
 
-const isAdminHash = () => window.location.hash === '#/admin'
+// Halaman di luar landing page, dibuka lewat hash. Tanpa react-router: cukup memantau hash.
+const PAGES = { '#/admin': AdminPage, '#/pemilik': OwnerPage, '#/masuk': LoginPage }
 
 /*
   Urutan section = urutan di halaman.
   Menambah section baru: buat komponennya di components/sections, lalu taruh di sini.
 */
 export default function App() {
-  // Halaman database dibuka lewat chat (#/admin). Tanpa react-router: cukup memantau hash.
-  const [admin, setAdmin] = useState(isAdminHash)
+  const [hash, setHash] = useState(() => window.location.hash)
   useEffect(() => {
-    const sync = () => setAdmin(isAdminHash())
+    const sync = () => setHash(window.location.hash)
     window.addEventListener('hashchange', sync)
     return () => window.removeEventListener('hashchange', sync)
   }, [])
 
-  if (admin) return <AdminPage />
+  const Page = PAGES[hash]
+  if (Page) return <Page />
 
   return (
     <OrderIntentProvider>

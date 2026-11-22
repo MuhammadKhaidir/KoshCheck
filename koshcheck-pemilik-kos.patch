@@ -1,0 +1,927 @@
+diff --git a/.env.example b/.env.example
+index a749576..14237f2 100644
+--- a/.env.example
++++ b/.env.example
+@@ -22,3 +22,9 @@ ADMIN_KEY=
+ MIDTRANS_SERVER_KEY=
+ MIDTRANS_CLIENT_KEY=
+ MIDTRANS_IS_PRODUCTION=false
++
++# Login pemilik kos (tombol "Masuk" di header). Semua pemilik memakai password awal yang sama di login pertama,
++# lalu wajib menggantinya. Kosong = bawaan "kosan12345" (ganti dengan milikmu sendiri).
++OWNER_DEFAULT_PASSWORD=
++# Kunci tanda tangan sesi pemilik. Kosong = diturunkan dari ADMIN_KEY (salah satunya harus terisi).
++OWNER_SECRET=
+diff --git a/api/_db.js b/api/_db.js
+index 7f7df93..44c984d 100644
+--- a/api/_db.js
++++ b/api/_db.js
+@@ -57,6 +57,16 @@ function getSql(env) {
+           add column if not exists tipe text,
+           add column if not exists fasilitas text,
+           add column if not exists publik boolean not null default false`
++      await sql`
++        create table if not exists owners (
++          id          text primary key,
++          whatsapp    text not null unique,
++          nama        text not null,
++          pass_hash   text not null,
++          must_change boolean not null default true,
++          created_at  timestamptz not null default now()
++        )`
++      await sql`alter table listings add column if not exists owner_id text references owners(id)`
+       return sql
+     })()
+     g.__koshDb = { url: env.DATABASE_URL, ready }
+@@ -78,9 +88,9 @@ function assertFileAllowed(env) {
+ async function readJson() {
+   try {
+     const db = JSON.parse(await readFile(FILE, 'utf8'))
+-    return { orders: db.orders ?? [], listings: db.listings ?? [] }
++    return { orders: db.orders ?? [], listings: db.listings ?? [], owners: db.owners ?? [] }
+   } catch (err) {
+-    if (err.code === 'ENOENT') return { orders: [], listings: [] }
++    if (err.code === 'ENOENT') return { orders: [], listings: [], owners: [] }
+     throw err // file rusak: jangan ditimpa diam-diam
+   }
+ }
+@@ -209,3 +219,120 @@ export async function listAll(env) {
+   ])
+   return { orders, listings }
+ }
++
++/* ---------- Pemilik kos ---------- */
++
++/** Nomor WhatsApp -> digit saja, awalan 0 jadi 62. Dipakai mencocokkan akun pemilik dengan data kosnya. */
++export const normWa = (value) => {
++  const digits = String(value ?? '').replace(/\D/g, '')
++  return digits.startsWith('0') ? `62${digits.slice(1)}` : digits
++}
++
++export async function getOwnerByWa(env, wa) {
++  if (!usePostgres(env)) {
++    assertFileAllowed(env)
++    return (await readJson()).owners.find((o) => o.whatsapp === wa) ?? null
++  }
++  const sql = await getSql(env)
++  const [row] = await sql`select * from owners where whatsapp = ${wa}`
++  return row ?? null
++}
++
++export async function getOwnerById(env, id) {
++  if (!usePostgres(env)) {
++    assertFileAllowed(env)
++    return (await readJson()).owners.find((o) => o.id === id) ?? null
++  }
++  const sql = await getSql(env)
++  const [row] = await sql`select * from owners where id = ${id}`
++  return row ?? null
++}
++
++/** Akun baru selalu wajib ganti password (must_change). Nomor yang sudah punya akun mengembalikan akun lama. */
++export async function insertOwner(env, o) {
++  if (!usePostgres(env)) {
++    assertFileAllowed(env)
++    return updateJson((db) => {
++      const found = db.owners.find((x) => x.whatsapp === o.whatsapp)
++      if (found) return found
++      const row = { ...o, must_change: true, created_at: new Date().toISOString() }
++      db.owners.push(row)
++      return row
++    })
++  }
++  const sql = await getSql(env)
++  const [row] = await sql`
++    insert into owners (id, whatsapp, nama, pass_hash)
++    values (${o.id}, ${o.whatsapp}, ${o.nama}, ${o.pass_hash})
++    on conflict (whatsapp) do nothing
++    returning *`
++  return row ?? getOwnerByWa(env, o.whatsapp)
++}
++
++export async function setOwnerPassword(env, id, passHash) {
++  if (!usePostgres(env)) {
++    assertFileAllowed(env)
++    return updateJson((db) => {
++      const row = db.owners.find((o) => o.id === id)
++      if (row) Object.assign(row, { pass_hash: passHash, must_change: false })
++    })
++  }
++  const sql = await getSql(env)
++  await sql`update owners set pass_hash = ${passHash}, must_change = false where id = ${id}`
++}
++
++/** Semua kos yang nomor WhatsApp-nya (setelah dinormalkan) sama dengan wa. Isi: id, nama, whatsapp, owner_id. */
++export async function listingsByWa(env, wa) {
++  let rows
++  if (!usePostgres(env)) {
++    assertFileAllowed(env)
++    rows = (await readJson()).listings
++  } else {
++    const sql = await getSql(env)
++    rows = await sql`
++      select id, nama, whatsapp, owner_id from listings
++      where regexp_replace(whatsapp, '[^0-9]', '', 'g') like ${'%' + wa.slice(-8)}`
++  }
++  return rows.filter((r) => normWa(r.whatsapp) === wa)
++}
++
++export async function setListingsOwner(env, ids, ownerId) {
++  if (!usePostgres(env)) {
++    assertFileAllowed(env)
++    return updateJson((db) => {
++      for (const l of db.listings) if (ids.includes(l.id) && !l.owner_id) l.owner_id = ownerId
++    })
++  }
++  const sql = await getSql(env)
++  await sql`update listings set owner_id = ${ownerId} where id in ${sql(ids)} and owner_id is null`
++}
++
++/**
++ * Kos milik satu pemilik, terbaru di atas, dengan status pesanan survei:
++ * 'dipesan' (ada pesanan lunas), 'menunggu' (ada pesanan belum bayar), 'belum'.
++ * Pesanan dicocokkan lewat nama kos (orders.kos). Data pemesan tidak ikut.
++ */
++export async function listOwnerKos(env, ownerId) {
++  const key = (v) => String(v ?? '').trim().toLowerCase()
++  let listings
++  let orders
++  if (!usePostgres(env)) {
++    assertFileAllowed(env)
++    const db = await readJson()
++    listings = db.listings.filter((l) => l.owner_id === ownerId).reverse()
++    orders = db.orders
++  } else {
++    const sql = await getSql(env)
++    listings = await sql`
++      select id, kos, area, tipe, harga, created_at from listings
++      where owner_id = ${ownerId} order by created_at desc`
++    orders = listings.length
++      ? await sql`select kos, status from orders where lower(trim(kos)) in ${sql(listings.map((l) => key(l.kos)))}`
++      : []
++  }
++  return listings.map((l) => {
++    const mine = orders.filter((o) => key(o.kos) === key(l.kos))
++    const status = mine.some((o) => o.status === 'paid') ? 'dipesan' : mine.some((o) => o.status === 'pending') ? 'menunggu' : 'belum'
++    return { id: l.id, kos: l.kos, area: l.area, tipe: l.tipe, harga: l.harga, created_at: l.created_at, status }
++  })
++}
+diff --git a/api/_owner.js b/api/_owner.js
+new file mode 100644
+index 0000000..d9f77ac
+--- /dev/null
++++ b/api/_owner.js
+@@ -0,0 +1,55 @@
++/*
++  Bantuan login pemilik kos (dipakai api/owner.js). Berawalan "_" jadi bukan endpoint.
++  - Password disimpan sebagai hash scrypt (garam acak per akun), bukan teks biasa.
++  - Token sesi bertanda tangan HMAC, 2 jam. Kuncinya diturunkan dari "owner:" + OWNER_SECRET (atau ADMIN_KEY),
++    jadi token pemilik TIDAK bisa dipakai sebagai token admin, dan sebaliknya.
++*/
++import { createHmac, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto'
++import { sameSecret } from './_auth.js'
++
++const TOKEN_TTL_MS = 2 * 60 * 60 * 1000
++
++/** Password awal yang sama untuk semua pemilik. Ganti lewat env OWNER_DEFAULT_PASSWORD. */
++export const defaultPassword = (env) => env.OWNER_DEFAULT_PASSWORD || 'kosan12345'
++
++const secretOf = (env) => {
++  const base = env.OWNER_SECRET || env.ADMIN_KEY
++  return base ? `owner:${base}` : ''
++}
++export const ownerEnabled = (env) => Boolean(secretOf(env))
++
++export function hashPassword(password) {
++  const salt = randomBytes(16).toString('hex')
++  return `${salt}:${scryptSync(String(password), salt, 32).toString('hex')}`
++}
++
++export function checkPassword(password, stored) {
++  const [salt, hash] = String(stored ?? '').split(':')
++  if (!salt || !hash) return false
++  const given = scryptSync(String(password ?? ''), salt, 32)
++  const expected = Buffer.from(hash, 'hex')
++  return given.length === expected.length && timingSafeEqual(given, expected)
++}
++
++const sign = (payload, secret) => createHmac('sha256', secret).update(payload).digest('base64url')
++
++export function makeOwnerToken(env, ownerId, now = Date.now()) {
++  const expiresAt = now + TOKEN_TTL_MS
++  const payload = Buffer.from(JSON.stringify({ oid: ownerId, exp: expiresAt })).toString('base64url')
++  return { token: `${payload}.${sign(payload, secretOf(env))}`, expiresAt }
++}
++
++/** Id pemilik dari header Authorization: Bearer <token>, atau null bila tidak sah / kedaluwarsa. */
++export function ownerIdFromRequest(req, env) {
++  const secret = secretOf(env)
++  const token = /^Bearer\s+(\S+)$/i.exec(req?.headers?.authorization ?? '')?.[1]
++  if (!secret || !token) return null
++  const parts = token.split('.')
++  if (parts.length !== 2 || !sameSecret(parts[1], sign(parts[0], secret))) return null
++  try {
++    const { oid, exp } = JSON.parse(Buffer.from(parts[0], 'base64url').toString())
++    return typeof oid === 'string' && exp > Date.now() ? oid : null
++  } catch {
++    return null
++  }
++}
+diff --git a/api/owner.js b/api/owner.js
+new file mode 100644
+index 0000000..6a8fd0b
+--- /dev/null
++++ b/api/owner.js
+@@ -0,0 +1,111 @@
++/*
++  Login dan data Pemilik Kos (Vercel Serverless Function). Satu endpoint untuk tiga aksi supaya jumlah
++  function di Vercel tidak bertambah banyak. Semuanya POST dengan body { action, ... }.
++
++    { action: 'login', whatsapp, password }       -> { token, expiresAt, mustChange, nama }
++    { action: 'data' }                            -> { owner: { nama, whatsapp, mustChange }, kos: [...] }
++    { action: 'password', password, newPassword } -> { ok: true }
++  'data' dan 'password' memakai header  Authorization: Bearer <token>  dari login.
++
++  Akun pemilik dibuat otomatis saat nomor WhatsApp-nya login pertama kali, bila nomor itu sudah ada di
++  data kos (listings). Password awalnya sama untuk semua (env OWNER_DEFAULT_PASSWORD) dan wajib diganti:
++  selama belum diganti, 'data' tidak mengembalikan kos sama sekali.
++  Pemilik hanya menerima kos miliknya (listings.owner_id). Data pemesan tidak ikut, hanya statusnya.
++*/
++import { clearFailures, clientIp, lockedMinutes, recordFailure, sameSecret } from './_auth.js'
++import {
++  getOwnerById, getOwnerByWa, insertOwner, listingsByWa, listOwnerKos, newId, normWa, setListingsOwner, setOwnerPassword,
++} from './_db.js'
++import { checkPassword, defaultPassword, hashPassword, makeOwnerToken, ownerEnabled, ownerIdFromRequest } from './_owner.js'
++
++const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
++const fail = (status, error) => ({ status, data: { error } })
++
++/** Hubungkan kos yang nomor WhatsApp-nya sama dengan akun ini (termasuk kos yang ditambah belakangan). */
++async function linkListings(env, owner) {
++  const free = (await listingsByWa(env, owner.whatsapp)).filter((l) => !l.owner_id).map((l) => l.id)
++  if (free.length) await setListingsOwner(env, free, owner.id)
++}
++
++async function login(body, env, req) {
++  const ip = `owner:${clientIp(req)}`
++  const menit = lockedMinutes(ip)
++  if (menit) return fail(429, `Terlalu banyak percobaan. Coba lagi dalam ${menit} menit.`)
++
++  const wa = normWa(body?.whatsapp)
++  const password = typeof body?.password === 'string' ? body.password.slice(0, 200) : ''
++
++  let owner = wa.length >= 8 ? await getOwnerByWa(env, wa) : null
++  if (!owner && wa.length >= 8) {
++    const kos = await listingsByWa(env, wa)
++    if (kos.length) {
++      owner = await insertOwner(env, { id: newId('OW'), whatsapp: wa, nama: kos[0].nama, pass_hash: hashPassword(defaultPassword(env)) })
++    }
++  }
++  if (!owner || !checkPassword(password, owner.pass_hash)) {
++    recordFailure(ip)
++    await wait(400)
++    return fail(401, 'Nomor WhatsApp atau password salah.')
++  }
++
++  clearFailures(ip)
++  await linkListings(env, owner)
++  return { status: 200, data: { ...makeOwnerToken(env, owner.id), mustChange: Boolean(owner.must_change), nama: owner.nama } }
++}
++
++async function currentOwner(env, req) {
++  const id = ownerIdFromRequest(req, env)
++  return id ? getOwnerById(env, id) : null
++}
++
++async function data(env, req) {
++  const owner = await currentOwner(env, req)
++  if (!owner) return fail(401, 'Belum masuk atau sesi sudah habis.')
++  await linkListings(env, owner)
++  const mustChange = Boolean(owner.must_change)
++  const kos = mustChange ? [] : await listOwnerKos(env, owner.id)
++  return { status: 200, data: { owner: { nama: owner.nama, whatsapp: owner.whatsapp, mustChange }, kos } }
++}
++
++async function changePassword(body, env, req) {
++  const owner = await currentOwner(env, req)
++  if (!owner) return fail(401, 'Belum masuk atau sesi sudah habis.')
++
++  const ip = `owner:${clientIp(req)}`
++  const menit = lockedMinutes(ip)
++  if (menit) return fail(429, `Terlalu banyak percobaan. Coba lagi dalam ${menit} menit.`)
++
++  const current = typeof body?.password === 'string' ? body.password.slice(0, 200) : ''
++  const next = typeof body?.newPassword === 'string' ? body.newPassword : ''
++  if (!checkPassword(current, owner.pass_hash)) {
++    recordFailure(ip)
++    return fail(400, 'Password saat ini salah.')
++  }
++  if (next.length < 8 || next.length > 200) return fail(400, 'Password baru minimal 8 karakter.')
++  if (sameSecret(next, current) || sameSecret(next, defaultPassword(env))) {
++    return fail(400, 'Password baru harus berbeda dari password awal.')
++  }
++
++  clearFailures(ip)
++  await setOwnerPassword(env, owner.id, hashPassword(next))
++  return { status: 200, data: { ok: true } }
++}
++
++export async function ownerApi(body, env, req) {
++  if (!ownerEnabled(env)) return fail(503, 'Login pemilik belum aktif. Isi ADMIN_KEY atau OWNER_SECRET di env.')
++  try {
++    if (body?.action === 'login') return await login(body, env, req)
++    if (body?.action === 'data') return await data(env, req)
++    if (body?.action === 'password') return await changePassword(body, env, req)
++    return fail(400, 'Aksi tidak dikenal.')
++  } catch (err) {
++    console.error('[owner]', err)
++    return fail(500, 'Terjadi masalah di server. Coba lagi sebentar.')
++  }
++}
++
++export default async function handler(req, res) {
++  if (req.method !== 'POST') return res.status(405).json({ error: 'Gunakan POST.' })
++  const { status, data } = await ownerApi(req.body, process.env, req)
++  res.status(status).json(data)
++}
+diff --git a/src/App.jsx b/src/App.jsx
+index adbc3dc..8536cc2 100644
+--- a/src/App.jsx
++++ b/src/App.jsx
+@@ -12,23 +12,26 @@ import Faq from './components/sections/Faq.jsx'
+ import Order from './components/sections/Order.jsx'
+ import ChatWidget from './components/chat/ChatWidget.jsx'
+ import AdminPage from './pages/AdminPage.jsx'
++import OwnerPage from './pages/OwnerPage.jsx'
++import LoginPage from './pages/LoginPage.jsx'
+ 
+-const isAdminHash = () => window.location.hash === '#/admin'
++// Halaman di luar landing page, dibuka lewat hash. Tanpa react-router: cukup memantau hash.
++const PAGES = { '#/admin': AdminPage, '#/pemilik': OwnerPage, '#/masuk': LoginPage }
+ 
+ /*
+   Urutan section = urutan di halaman.
+   Menambah section baru: buat komponennya di components/sections, lalu taruh di sini.
+ */
+ export default function App() {
+-  // Halaman database dibuka lewat chat (#/admin). Tanpa react-router: cukup memantau hash.
+-  const [admin, setAdmin] = useState(isAdminHash)
++  const [hash, setHash] = useState(() => window.location.hash)
+   useEffect(() => {
+-    const sync = () => setAdmin(isAdminHash())
++    const sync = () => setHash(window.location.hash)
+     window.addEventListener('hashchange', sync)
+     return () => window.removeEventListener('hashchange', sync)
+   }, [])
+ 
+-  if (admin) return <AdminPage />
++  const Page = PAGES[hash]
++  if (Page) return <Page />
+ 
+   return (
+     <OrderIntentProvider>
+diff --git a/src/components/layout/Header.jsx b/src/components/layout/Header.jsx
+index df6a92e..69bddfb 100644
+--- a/src/components/layout/Header.jsx
++++ b/src/components/layout/Header.jsx
+@@ -64,6 +64,11 @@ export default function Header() {
+                 </a>
+               </li>
+             ))}
++            <li>
++              <a className={s.link} href="#/masuk" onClick={close}>
++                Masuk
++              </a>
++            </li>
+             <li className={s.mobileCta}>
+               <OrderButton intent={{ mode: 'survei' }} onClick={close}>
+                 Pesan survei
+diff --git a/src/lib/ownerSession.js b/src/lib/ownerSession.js
+new file mode 100644
+index 0000000..fae1380
+--- /dev/null
++++ b/src/lib/ownerSession.js
+@@ -0,0 +1,24 @@
++/*
++  Token login pemilik kos disimpan di sessionStorage (hilang saat tab ditutup, server menolaknya setelah 2 jam).
++  Yang disimpan hanya token dari /api/owner, bukan password.
++*/
++const KEY = 'kc_owner_token'
++
++/** Bisa melempar error di beberapa mode privat. Pemanggil yang menanganinya. */
++export const saveOwnerToken = (token) => sessionStorage.setItem(KEY, token)
++
++export function getOwnerToken() {
++  try {
++    return sessionStorage.getItem(KEY)
++  } catch {
++    return null
++  }
++}
++
++export function clearOwnerToken() {
++  try {
++    sessionStorage.removeItem(KEY)
++  } catch {
++    /* abaikan */
++  }
++}
+diff --git a/src/pages/AdminPage.jsx b/src/pages/AdminPage.jsx
+index ac178e6..83c6550 100644
+--- a/src/pages/AdminPage.jsx
++++ b/src/pages/AdminPage.jsx
+@@ -136,11 +136,10 @@ export default function AdminPage() {
+         {state === 'nologin' && (
+           <div className={s.notice}>
+             <p>
+-              Sesi admin tidak ada atau sudah habis. Buka chat KOSCHECK di pojok kanan bawah halaman utama, ketik
+-              &ldquo;buka database&rdquo;, lalu masukkan password admin.
++              Sesi admin tidak ada atau sudah habis. Silakan masuk lagi.
+             </p>
+-            <Button as="a" href="#top">
+-              Ke halaman utama
++            <Button as="a" href="#/masuk">
++              Masuk
+             </Button>
+           </div>
+         )}
+diff --git a/src/pages/Auth.module.css b/src/pages/Auth.module.css
+new file mode 100644
+index 0000000..7a879f4
+--- /dev/null
++++ b/src/pages/Auth.module.css
+@@ -0,0 +1,75 @@
++.card {
++  display: grid;
++  gap: var(--space-4);
++  width: min(100%, 26rem);
++  padding: var(--space-5);
++  background: var(--white);
++  border: 2px solid var(--ink);
++  border-radius: var(--radius-m);
++}
++
++.form {
++  display: grid;
++  gap: var(--space-3);
++  width: 100%;
++}
++
++.tabs {
++  display: flex;
++  gap: var(--space-2);
++}
++
++.tab {
++  flex: 1;
++  padding: var(--space-2) var(--space-3);
++  font: inherit;
++  font-weight: 700;
++  background: var(--paper);
++  border: 2px solid var(--ink);
++  border-radius: var(--radius-s);
++  cursor: pointer;
++}
++
++.tab[aria-pressed='true'] {
++  background: var(--marker);
++}
++
++.field {
++  display: grid;
++  gap: var(--space-1);
++  font-size: var(--step--1);
++  font-weight: 600;
++}
++
++.input {
++  width: 100%;
++  padding: var(--space-2) var(--space-3);
++  font: inherit;
++  background: var(--white);
++  border: 2px solid var(--ink);
++  border-radius: var(--radius-s);
++}
++
++.input:focus-visible {
++  outline: 3px solid var(--focus);
++  outline-offset: 2px;
++}
++
++.error {
++  padding: var(--space-3);
++  background: var(--bad-bg);
++  border-radius: var(--radius-s);
++  font-size: var(--step--1);
++  font-weight: 600;
++  color: var(--bad);
++}
++
++.hint {
++  font-size: var(--step--1);
++  color: var(--muted);
++}
++
++.plain {
++  background: var(--paper-sunk);
++  color: var(--muted);
++}
+diff --git a/src/pages/LoginPage.jsx b/src/pages/LoginPage.jsx
+new file mode 100644
+index 0000000..597c2b2
+--- /dev/null
++++ b/src/pages/LoginPage.jsx
+@@ -0,0 +1,142 @@
++import { useId, useState } from 'react'
++import Container from '../components/ui/Container.jsx'
++import Button from '../components/ui/Button.jsx'
++import { saveToken as saveAdminToken } from '../lib/adminSession.js'
++import { saveOwnerToken } from '../lib/ownerSession.js'
++import s from './AdminPage.module.css'
++import a from './Auth.module.css'
++
++/*
++  Halaman masuk (#/masuk), dibuka dari tombol "Masuk" di header. Dua jalur: Pemilik Kos dan Admin.
++  Password dikirim langsung ke server (/api/owner atau /api/admin-login), tidak lewat chat AI.
++*/
++async function post(url, body) {
++  const res = await fetch(url, {
++    method: 'POST',
++    headers: { 'Content-Type': 'application/json' },
++    body: JSON.stringify(body),
++  })
++  const data = await res.json().catch(() => ({}))
++  if (!res.ok || !data.token) throw new Error(data.error || 'Gagal masuk. Coba lagi sebentar.')
++  return data
++}
++
++function keep(save, token) {
++  try {
++    save(token)
++  } catch {
++    throw new Error('Browser menolak menyimpan sesi. Matikan mode privat, lalu coba lagi.')
++  }
++}
++
++export default function LoginPage() {
++  const uid = useId()
++  const [role, setRole] = useState('pemilik')
++  const [whatsapp, setWhatsapp] = useState('')
++  const [password, setPassword] = useState('')
++  const [busy, setBusy] = useState(false)
++  const [error, setError] = useState('')
++
++  const pickRole = (next) => {
++    setRole(next)
++    setError('')
++    setPassword('')
++  }
++
++  async function submit(event) {
++    event.preventDefault()
++    if (busy) return
++    setBusy(true)
++    setError('')
++    try {
++      if (role === 'admin') {
++        const data = await post('/api/admin-login', { password })
++        keep(saveAdminToken, data.token)
++        window.location.hash = '#/admin'
++      } else {
++        const data = await post('/api/owner', { action: 'login', whatsapp, password })
++        keep(saveOwnerToken, data.token)
++        window.location.hash = '#/pemilik'
++      }
++    } catch (err) {
++      setError(err.message)
++      setPassword('')
++      setBusy(false)
++    }
++  }
++
++  return (
++    <main className={s.page}>
++      <Container>
++        <header className={s.top}>
++          <div>
++            <p className={s.kicker}>KOSCHECK</p>
++            <h1 className={s.title}>Masuk</h1>
++          </div>
++        </header>
++
++        <div className={a.card}>
++          <div className={a.tabs}>
++            <button type="button" className={a.tab} aria-pressed={role === 'pemilik'} onClick={() => pickRole('pemilik')}>
++              Pemilik Kos
++            </button>
++            <button type="button" className={a.tab} aria-pressed={role === 'admin'} onClick={() => pickRole('admin')}>
++              Admin
++            </button>
++          </div>
++
++          <form className={a.form} onSubmit={submit}>
++            {role === 'pemilik' && (
++              <div className={a.field}>
++                <label htmlFor={`${uid}-wa`}>Nomor WhatsApp</label>
++                <input
++                  id={`${uid}-wa`}
++                  className={a.input}
++                  type="tel"
++                  inputMode="tel"
++                  autoComplete="username"
++                  maxLength={20}
++                  placeholder="08xxxxxxxxxx"
++                  value={whatsapp}
++                  onChange={(e) => setWhatsapp(e.target.value)}
++                  required
++                />
++              </div>
++            )}
++            <div className={a.field}>
++              <label htmlFor={`${uid}-pw`}>Password</label>
++              <input
++                id={`${uid}-pw`}
++                className={a.input}
++                type="password"
++                autoComplete="current-password"
++                maxLength={200}
++                value={password}
++                onChange={(e) => setPassword(e.target.value)}
++                required
++              />
++            </div>
++            {role === 'pemilik' && (
++              <p className={a.hint}>
++                Pakai nomor WhatsApp yang didaftarkan untuk kosmu. Login pertama memakai password awal dari tim
++                KOSCHECK, lalu kamu diminta menggantinya.
++              </p>
++            )}
++            {error && (
++              <p className={a.error} role="alert">
++                {error}
++              </p>
++            )}
++            <Button as="button" type="submit" disabled={busy || !password}>
++              {busy ? 'Memeriksa…' : 'Masuk'}
++            </Button>
++          </form>
++
++          <Button as="a" variant="secondary" size="sm" href="#top">
++            Kembali ke situs
++          </Button>
++        </div>
++      </Container>
++    </main>
++  )
++}
+diff --git a/src/pages/OwnerPage.jsx b/src/pages/OwnerPage.jsx
+new file mode 100644
+index 0000000..eb3fcad
+--- /dev/null
++++ b/src/pages/OwnerPage.jsx
+@@ -0,0 +1,233 @@
++import { useCallback, useEffect, useId, useState } from 'react'
++import Container from '../components/ui/Container.jsx'
++import Button from '../components/ui/Button.jsx'
++import { rupiah } from '../lib/format.js'
++import { clearOwnerToken, getOwnerToken } from '../lib/ownerSession.js'
++import s from './AdminPage.module.css'
++import a from './Auth.module.css'
++
++/*
++  Halaman Pemilik Kos (#/pemilik). Hanya menampilkan kos milik akun yang login, beserta status pesanannya.
++  Selama password awal belum diganti, server tidak mengirim data kos: yang tampil hanya form ganti password.
++*/
++const REFRESH_MS = 30000
++
++const STATUS = {
++  dipesan: { label: 'Sudah dipesan', tone: s.ok },
++  menunggu: { label: 'Menunggu pembayaran', tone: s.warn },
++  belum: { label: 'Belum dipesan', tone: a.plain },
++}
++
++async function call(body) {
++  const res = await fetch('/api/owner', {
++    method: 'POST',
++    headers: { 'Content-Type': 'application/json', authorization: `Bearer ${getOwnerToken()}` },
++    body: JSON.stringify(body),
++  })
++  const data = await res.json().catch(() => ({}))
++  return { res, data }
++}
++
++const FIELDS = [
++  ['password', 'Password saat ini (password awal)', 'current-password'],
++  ['newPassword', 'Password baru (minimal 8 karakter)', 'new-password'],
++  ['again', 'Ulangi password baru', 'new-password'],
++]
++
++function ChangePassword({ onDone }) {
++  const uid = useId()
++  const [form, setForm] = useState({ password: '', newPassword: '', again: '' })
++  const [busy, setBusy] = useState(false)
++  const [error, setError] = useState('')
++
++  async function submit(event) {
++    event.preventDefault()
++    if (busy) return
++    if (form.newPassword.length < 8) return setError('Password baru minimal 8 karakter.')
++    if (form.newPassword !== form.again) return setError('Ulangi password baru dengan sama persis.')
++    setBusy(true)
++    setError('')
++    try {
++      const { res, data } = await call({ action: 'password', password: form.password, newPassword: form.newPassword })
++      if (!res.ok) throw new Error(data.error || 'Password belum bisa diganti.')
++      onDone()
++    } catch (err) {
++      setError(err.message)
++      setBusy(false)
++    }
++  }
++
++  return (
++    <div className={s.notice} role="alert">
++      <h2 className={s.h2}>Wajib ganti password</h2>
++      <p>Kamu masih memakai password awal. Ganti dulu dengan password baru sebelum melihat data kosmu.</p>
++      <form className={a.form} onSubmit={submit}>
++        {FIELDS.map(([key, label, autoComplete]) => (
++          <div className={a.field} key={key}>
++            <label htmlFor={`${uid}-${key}`}>{label}</label>
++            <input
++              id={`${uid}-${key}`}
++              className={a.input}
++              type="password"
++              autoComplete={autoComplete}
++              maxLength={200}
++              value={form[key]}
++              onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
++              required
++            />
++          </div>
++        ))}
++        {error && <p className={a.error}>{error}</p>}
++        <Button as="button" type="submit" disabled={busy}>
++          {busy ? 'Menyimpan…' : 'Simpan password baru'}
++        </Button>
++      </form>
++    </div>
++  )
++}
++
++export default function OwnerPage() {
++  const [state, setState] = useState(() => (getOwnerToken() ? 'loading' : 'nologin')) // loading | ready | nologin | error
++  const [owner, setOwner] = useState(null)
++  const [kos, setKos] = useState([])
++  const [error, setError] = useState('')
++
++  const load = useCallback(async () => {
++    if (!getOwnerToken()) return setState('nologin')
++    try {
++      const { res, data } = await call({ action: 'data' })
++      if (res.status === 401) {
++        clearOwnerToken()
++        return setState('nologin')
++      }
++      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)
++      setOwner(data.owner)
++      setKos(data.kos ?? [])
++      setError('')
++      setState('ready')
++    } catch (err) {
++      setError(err.message)
++      setState((prev) => (prev === 'ready' ? 'ready' : 'error'))
++    }
++  }, [])
++
++  useEffect(() => {
++    const oldTitle = document.title
++    document.title = 'Pemilik Kos | KOSCHECK'
++    window.scrollTo(0, 0)
++    load()
++    const timer = setInterval(load, REFRESH_MS)
++    return () => {
++      clearInterval(timer)
++      document.title = oldTitle
++    }
++  }, [load])
++
++  function logout() {
++    clearOwnerToken()
++    window.location.hash = '#top'
++  }
++
++  return (
++    <main className={s.page}>
++      <Container>
++        <header className={s.top}>
++          <div>
++            <p className={s.kicker}>KOSCHECK</p>
++            <h1 className={s.title}>Kos Saya</h1>
++            {owner && <p className={s.sub}>Masuk sebagai {owner.nama}.</p>}
++          </div>
++          <div className={s.topActions}>
++            {state === 'ready' && !owner?.mustChange && (
++              <Button as="button" variant="secondary" size="sm" onClick={load}>
++                Muat ulang
++              </Button>
++            )}
++            <Button as="a" variant="secondary" size="sm" href="#top">
++              Kembali ke situs
++            </Button>
++            {state !== 'nologin' && (
++              <Button as="button" size="sm" onClick={logout}>
++                Keluar
++              </Button>
++            )}
++          </div>
++        </header>
++
++        {state === 'loading' && (
++          <p className={s.notice} role="status">
++            Memuat data…
++          </p>
++        )}
++
++        {state === 'nologin' && (
++          <div className={s.notice}>
++            <p>Sesi tidak ada atau sudah habis. Silakan masuk lagi.</p>
++            <Button as="a" href="#/masuk">
++              Masuk
++            </Button>
++          </div>
++        )}
++
++        {state === 'error' && (
++          <div className={s.notice} role="alert">
++            <p>Data belum bisa dimuat: {error}</p>
++            <Button as="button" onClick={load}>
++              Coba lagi
++            </Button>
++          </div>
++        )}
++
++        {state === 'ready' && owner.mustChange && <ChangePassword onDone={load} />}
++
++        {state === 'ready' && !owner.mustChange && (
++          <section className={s.block} aria-labelledby="owner-kos">
++            <div className={s.blockHead}>
++              <h2 id="owner-kos" className={s.h2}>
++                Kos yang terdaftar atas nomor {owner.whatsapp}
++              </h2>
++            </div>
++            {error && (
++              <p className={s.error} role="alert">
++                Gagal memperbarui: {error}
++              </p>
++            )}
++            {kos.length === 0 ? (
++              <p className={s.empty}>Belum ada kos yang terhubung dengan akun ini.</p>
++            ) : (
++              <div className={s.scroll} role="region" aria-label="Tabel kos saya" tabIndex={0}>
++                <table className={s.table}>
++                  <thead>
++                    <tr>
++                      <th scope="col">Nama kos</th>
++                      <th scope="col">Area</th>
++                      <th scope="col">Tipe</th>
++                      <th scope="col">Harga / bulan</th>
++                      <th scope="col">Status pesanan</th>
++                    </tr>
++                  </thead>
++                  <tbody>
++                    {kos.map((k) => {
++                      const st = STATUS[k.status] ?? STATUS.belum
++                      return (
++                        <tr key={k.id}>
++                          <td className={s.wrap}>{k.kos}</td>
++                          <td className={s.wrap}>{k.area}</td>
++                          <td>{k.tipe || '-'}</td>
++                          <td className={s.nowrap}>{k.harga ? rupiah(k.harga) : '-'}</td>
++                          <td>
++                            <span className={`${s.badge} ${st.tone}`}>{st.label}</span>
++                          </td>
++                        </tr>
++                      )
++                    })}
++                  </tbody>
++                </table>
++              </div>
++            )}
++          </section>
++        )}
++      </Container>
++    </main>
++  )
++}
+diff --git a/vite.config.js b/vite.config.js
+index 8568087..72872b6 100644
+--- a/vite.config.js
++++ b/vite.config.js
+@@ -17,6 +17,7 @@ const DEV_API = {
+   '/api/kos': { file: 'api/kos.js', fn: 'listKos', method: 'GET' },
+   '/api/admin-login': { file: 'api/admin-login.js', fn: 'adminLogin' },
+   '/api/admin-listings': { file: 'api/admin-listings.js', fn: 'addListing' },
++  '/api/owner': { file: 'api/owner.js', fn: 'ownerApi' },
+ }
+ 
+ function devApi(env) {

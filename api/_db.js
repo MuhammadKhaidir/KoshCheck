@@ -57,6 +57,16 @@ function getSql(env) {
           add column if not exists tipe text,
           add column if not exists fasilitas text,
           add column if not exists publik boolean not null default false`
+      await sql`
+        create table if not exists owners (
+          id          text primary key,
+          whatsapp    text not null unique,
+          nama        text not null,
+          pass_hash   text not null,
+          must_change boolean not null default true,
+          created_at  timestamptz not null default now()
+        )`
+      await sql`alter table listings add column if not exists owner_id text references owners(id)`
       return sql
     })()
     g.__koshDb = { url: env.DATABASE_URL, ready }
@@ -78,9 +88,9 @@ function assertFileAllowed(env) {
 async function readJson() {
   try {
     const db = JSON.parse(await readFile(FILE, 'utf8'))
-    return { orders: db.orders ?? [], listings: db.listings ?? [] }
+    return { orders: db.orders ?? [], listings: db.listings ?? [], owners: db.owners ?? [] }
   } catch (err) {
-    if (err.code === 'ENOENT') return { orders: [], listings: [] }
+    if (err.code === 'ENOENT') return { orders: [], listings: [], owners: [] }
     throw err // file rusak: jangan ditimpa diam-diam
   }
 }
@@ -208,4 +218,121 @@ export async function listAll(env) {
     sql`select * from listings order by created_at desc limit 500`,
   ])
   return { orders, listings }
+}
+
+/* ---------- Pemilik kos ---------- */
+
+/** Nomor WhatsApp -> digit saja, awalan 0 jadi 62. Dipakai mencocokkan akun pemilik dengan data kosnya. */
+export const normWa = (value) => {
+  const digits = String(value ?? '').replace(/\D/g, '')
+  return digits.startsWith('0') ? `62${digits.slice(1)}` : digits
+}
+
+export async function getOwnerByWa(env, wa) {
+  if (!usePostgres(env)) {
+    assertFileAllowed(env)
+    return (await readJson()).owners.find((o) => o.whatsapp === wa) ?? null
+  }
+  const sql = await getSql(env)
+  const [row] = await sql`select * from owners where whatsapp = ${wa}`
+  return row ?? null
+}
+
+export async function getOwnerById(env, id) {
+  if (!usePostgres(env)) {
+    assertFileAllowed(env)
+    return (await readJson()).owners.find((o) => o.id === id) ?? null
+  }
+  const sql = await getSql(env)
+  const [row] = await sql`select * from owners where id = ${id}`
+  return row ?? null
+}
+
+/** Akun baru selalu wajib ganti password (must_change). Nomor yang sudah punya akun mengembalikan akun lama. */
+export async function insertOwner(env, o) {
+  if (!usePostgres(env)) {
+    assertFileAllowed(env)
+    return updateJson((db) => {
+      const found = db.owners.find((x) => x.whatsapp === o.whatsapp)
+      if (found) return found
+      const row = { ...o, must_change: true, created_at: new Date().toISOString() }
+      db.owners.push(row)
+      return row
+    })
+  }
+  const sql = await getSql(env)
+  const [row] = await sql`
+    insert into owners (id, whatsapp, nama, pass_hash)
+    values (${o.id}, ${o.whatsapp}, ${o.nama}, ${o.pass_hash})
+    on conflict (whatsapp) do nothing
+    returning *`
+  return row ?? getOwnerByWa(env, o.whatsapp)
+}
+
+export async function setOwnerPassword(env, id, passHash) {
+  if (!usePostgres(env)) {
+    assertFileAllowed(env)
+    return updateJson((db) => {
+      const row = db.owners.find((o) => o.id === id)
+      if (row) Object.assign(row, { pass_hash: passHash, must_change: false })
+    })
+  }
+  const sql = await getSql(env)
+  await sql`update owners set pass_hash = ${passHash}, must_change = false where id = ${id}`
+}
+
+/** Semua kos yang nomor WhatsApp-nya (setelah dinormalkan) sama dengan wa. Isi: id, nama, whatsapp, owner_id. */
+export async function listingsByWa(env, wa) {
+  let rows
+  if (!usePostgres(env)) {
+    assertFileAllowed(env)
+    rows = (await readJson()).listings
+  } else {
+    const sql = await getSql(env)
+    rows = await sql`
+      select id, nama, whatsapp, owner_id from listings
+      where regexp_replace(whatsapp, '[^0-9]', '', 'g') like ${'%' + wa.slice(-8)}`
+  }
+  return rows.filter((r) => normWa(r.whatsapp) === wa)
+}
+
+export async function setListingsOwner(env, ids, ownerId) {
+  if (!usePostgres(env)) {
+    assertFileAllowed(env)
+    return updateJson((db) => {
+      for (const l of db.listings) if (ids.includes(l.id) && !l.owner_id) l.owner_id = ownerId
+    })
+  }
+  const sql = await getSql(env)
+  await sql`update listings set owner_id = ${ownerId} where id in ${sql(ids)} and owner_id is null`
+}
+
+/**
+ * Kos milik satu pemilik, terbaru di atas, dengan status pesanan survei:
+ * 'dipesan' (ada pesanan lunas), 'menunggu' (ada pesanan belum bayar), 'belum'.
+ * Pesanan dicocokkan lewat nama kos (orders.kos). Data pemesan tidak ikut.
+ */
+export async function listOwnerKos(env, ownerId) {
+  const key = (v) => String(v ?? '').trim().toLowerCase()
+  let listings
+  let orders
+  if (!usePostgres(env)) {
+    assertFileAllowed(env)
+    const db = await readJson()
+    listings = db.listings.filter((l) => l.owner_id === ownerId).reverse()
+    orders = db.orders
+  } else {
+    const sql = await getSql(env)
+    listings = await sql`
+      select id, kos, area, tipe, harga, created_at from listings
+      where owner_id = ${ownerId} order by created_at desc`
+    orders = listings.length
+      ? await sql`select kos, status from orders where lower(trim(kos)) in ${sql(listings.map((l) => key(l.kos)))}`
+      : []
+  }
+  return listings.map((l) => {
+    const mine = orders.filter((o) => key(o.kos) === key(l.kos))
+    const status = mine.some((o) => o.status === 'paid') ? 'dipesan' : mine.some((o) => o.status === 'pending') ? 'menunggu' : 'belum'
+    return { id: l.id, kos: l.kos, area: l.area, tipe: l.tipe, harga: l.harga, created_at: l.created_at, status }
+  })
 }

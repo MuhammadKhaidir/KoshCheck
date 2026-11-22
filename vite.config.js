@@ -17,6 +17,7 @@ const DEV_API = {
   '/api/kos': { file: 'api/kos.js', fn: 'listKos', method: 'GET' },
   '/api/admin-login': { file: 'api/admin-login.js', fn: 'adminLogin' },
   '/api/admin-listings': { file: 'api/admin-listings.js', fn: 'addListing' },
+  '/api/owner': { file: 'api/owner.js', fn: 'ownerApi' },
 }
 
 function devApi(env) {
