@@ -30,7 +30,7 @@ function composeMessage(f) {
   const catatan = f.catatan.trim() ? ` Catatan: ${f.catatan.trim()}` : ''
   const plan = plans.items.find((p) => p.id === f.paket) ?? plans.items[0]
   const kos = f.kos.trim() || '(nama kos atau link iklan)'
-  return `Halo ${brand.name}, saya ${nama}. Saya ingin memesan survei ${plan.name} (${rupiah(plan.price)}) untuk kos: ${kos}.${catatan}`
+  return `Halo ${brand.name}, saya ${nama}. Saya ingin memesan ${plan.price === 0 ? 'survei ' : ''}${plan.name} (${rupiah(plan.price)}) untuk kos: ${kos}.${catatan}`
 }
 
 /** Kirim JSON ke backend. Melempar Error dengan pesan yang aman ditampilkan ke pengguna. */
@@ -140,7 +140,7 @@ export default function Order() {
     ? ''
     : done.kind === 'listing'
       ? `Halo ${brand.name}, saya ${done.nama}. Saya sudah mendaftarkan kos ${done.kos} (nomor ${done.id}).`
-      : `Halo ${brand.name}, saya ${done.order.nama}. Pesanan ${done.order.orderId}: survei ${done.order.planName} untuk kos ${done.order.kos}.` +
+      : `Halo ${brand.name}, saya ${done.order.nama}. Pesanan ${done.order.orderId}: ${done.order.amount === 0 ? 'survei ' : ''}${done.order.planName} untuk kos ${done.order.kos}.` +
         (done.state === 'paid' ? ' Pembayaran sudah selesai.' : '')
   const confirmUrl = confirmText && contact.whatsapp ? `https://wa.me/${contact.whatsapp}?text=${encodeURIComponent(confirmText)}` : ''
 
@@ -248,7 +248,7 @@ export default function Order() {
                 <>
                   <p className={s.previewLabel}>Yang kamu bayar</p>
                   <p className={s.previewText}>
-                    Survei {plan.name}, {rupiah(plan.price)}. Metode pembayaran dipilih di langkah berikutnya.
+                    {plan.price === 0 ? 'Survei ' : ''}{plan.name}, {rupiah(plan.price)}. Metode pembayaran dipilih di langkah berikutnya.
                   </p>
                 </>
               ) : (

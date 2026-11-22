@@ -26,7 +26,7 @@ function loadSnap(src, clientKey) {
   });
 }
 
-// payWithSnap({ amount: 49000, itemName: 'Paket Cek Kos', customer: { name, email, phone } })
+// payWithSnap({ amount: 89000, itemName: 'Survei Standar', customer: { name, email, phone } })
 export async function payWithSnap(payload) {
   const { token, clientKey, snapUrl } = await postJSON('/api/midtrans-token', payload);
   await loadSnap(snapUrl, clientKey);

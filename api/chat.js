@@ -14,7 +14,7 @@
 
   Mau pakai penyedia AI lain (OpenAI, Gemini, dll)? Ubah fungsi askModel() saja.
 */
-import { brand, hero, plans, owners, faq, disclaimer } from '../src/content/site.js'
+import { brand, hero, freeCatalogPlan, plans, surveyPlans, ownerPlans, owners, faq, disclaimer } from '../src/content/site.js'
 import { kos } from '../src/data/kos.js'
 import { rupiah, tanggal } from '../src/lib/format.js'
 
@@ -26,8 +26,8 @@ const daftarKos = kos
   )
   .join('\n')
 
-const daftarPaket = plans.items
-  .map((p) => `- ${p.name}, ${rupiah(p.price)}: ${p.summary} Isi: ${p.includes.join('; ')}.`)
+const daftarPaket = (items) => items
+  .map((p) => `- ${p.name}, ${rupiah(p.price)}${p.duration ? ` (${p.duration})` : ''}: ${p.summary} Isi: ${p.includes.join('; ')}.`)
   .join('\n')
 
 const daftarFaq = faq.items.map((i) => `T: ${i.q}\nJ: ${i.a}`).join('\n')
@@ -43,10 +43,15 @@ Aturan menjawab:
 
 Tentang layanan: ${hero.lede}
 
-Paket Check Kost (berbayar):
-${daftarPaket}
+${plans.title}:
+${plans.lede}
+${daftarPaket(surveyPlans)}
+
+${ownerPlans.title}:
+${daftarPaket(ownerPlans.items)}
 
 Katalog kos (gratis, data contoh):
+${daftarPaket([freeCatalogPlan])}
 ${daftarKos}
 
 Untuk pemilik kos: ${owners.body}

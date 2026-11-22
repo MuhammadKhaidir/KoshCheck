@@ -35,31 +35,77 @@ export const headerNav = [
   ...nav.filter((item) => item.href !== '#masalah'),
 ]
 
-/*
-  Paket Check Kost.
-  Rentang harga Rp39.000 sampai Rp99.000 berasal dari dokumen strategi KOSCHECK.
-  Nama paket dan isinya adalah placeholder: sesuaikan dengan layanan yang sebenarnya.
-*/
-export const plans = {
-  title: 'Survei dari rumah lebih murah daripada berangkat sendiri.',
-  lede: 'Katalog gratis untuk semua orang. Layanan Check Kost berbayar untuk kos yang benar-benar kamu taksir.',
+const ownerBasics = [
+  'Listing kos di katalog',
+  'WhatsApp Agent KOSCHECK',
+  'Pengelolaan informasi kos',
+  'Statistik dasar',
+  'Pencatatan keuangan dasar',
+]
+
+export const ownerPlans = {
+  title: 'Paket Pemilik Kos',
+  lede: 'Kelola listing dan informasi kos dengan Free, atau pilih paket berbayar untuk dukungan pemasaran.',
   items: [
-        {
+    {
       id: 'free',
-      name: 'Gratis',
+      name: 'Free',
       price: 0,
-      summary: 'Untuk mengetahui kos yang tersedia di website kami serta didaerah Palembang.',
-      includes: [
-        'Foto Luar Kos',
-        'Contact Person',
-        'Daftar Fasilitas yang Tersedia (Belum Terverifikasi)',
-      ],
+      duration: 'Selamanya',
+      summary: 'Untuk mulai menampilkan dan mengelola kos di KOSCHECK.',
+      includes: ownerBasics,
     },
     {
+      id: 'premium',
+      name: 'Premium',
+      price: 49000,
+      duration: '90 hari',
+      summary: 'Untuk memperluas jangkauan listing dan melihat hasil pemasaran.',
+      includes: [...ownerBasics, 'Sponsor bergilir', 'Analitik pemasaran', '1 putaran follow-up'],
+    },
+    {
+      id: 'ultimate',
+      name: 'Ultimate',
+      price: 199000,
+      duration: '180 hari',
+      featured: true,
+      summary: 'Untuk promosi dengan penempatan prioritas dan pengelolaan keuangan lebih lengkap.',
+      includes: [
+        ...ownerBasics,
+        'Sponsor prioritas',
+        'Analitik pemasaran',
+        'Banner fisik 1 × 2 meter (satu kali)',
+        'Desain promosi',
+        'Publikasi media sosial (satu kali)',
+        '2 putaran follow-up',
+        'Keuangan lanjutan',
+      ],
+    },
+  ],
+}
+
+export const freeCatalogPlan = {
+  id: 'free',
+  name: 'Gratis',
+  price: 0,
+  summary: 'Untuk mengetahui kos yang tersedia di website kami serta didaerah Palembang.',
+  includes: [
+    'Foto Luar Kos',
+    'Contact Person',
+    'Daftar Fasilitas yang Tersedia (Belum Terverifikasi)',
+  ],
+}
+
+export const plans = {
+  title: 'Paket Pencari Kos',
+  lede: 'Katalog gratis untuk semua orang. Kedua paket survei mencakup akses penuh ke laporan selama 180 hari.',
+  items: [
+    freeCatalogPlan,
+    {
       id: 'dasar',
-      name: 'Cek Dasar',
-      price: 39000,
-      summary: 'Untuk menyaring kos sebelum kamu memutuskan datang.',
+      name: 'Survei Standar',
+      price: 89000,
+      summary: 'Pemeriksaan dasar untuk satu kos dan satu kamar.',
       includes: [
         'Foto dan video terbaru dari lokasi',
         'Pencocokan isi iklan dengan kondisi aktual',
@@ -68,12 +114,12 @@ export const plans = {
     },
     {
       id: 'lengkap',
-      name: 'Cek Lengkap',
-      price: 99000,
+      name: 'Survei Mendalam',
+      price: 149000,
       featured: true,
-      summary: 'Untuk kos yang sudah hampir kamu pilih.',
+      summary: 'Pemeriksaan lebih terperinci untuk kos yang sudah hampir kamu pilih.',
       includes: [
-        'Semua isi Cek Dasar',
+        'Semua pemeriksaan Survei Standar',
         'Pemeriksaan kebersihan dan lingkungan sekitar',
         'Laporan digital lengkap dengan catatan surveyor',
       ],
@@ -86,11 +132,12 @@ export const plans = {
       price: 164000,
       detail: `Tiket kereta pulang-pergi ${rupiah(64000)} ditambah semalam di kos harian ${rupiah(100000)}, belum termasuk makan dan transportasi lokal.`,
     },
-    note: 'Perhitungan simulasi. Harga paket adalah asumsi.',
+    note: 'Simulasi biaya perjalanan. Biaya aktual bisa berbeda.',
   },
 }
 
-export const startingPrice = Math.min(...plans.items.map((p) => p.price))
+export const surveyPlans = plans.items.filter((plan) => plan.price > 0)
+export const startingPrice = Math.min(...surveyPlans.map((plan) => plan.price))
 
 export const hero = {
   badge: 'Survei Kos Modern & Terpercaya',
@@ -149,10 +196,10 @@ export const catalog = {
 
 export const owners = {
   statement: 'Hasil survei tidak bisa dibeli.',
-  body: 'Pasang kosmu di katalog tanpa biaya. Kalau ingin lebih banyak dilihat, ada promosi premium, tetapi penilaian survei dipisahkan dari pembayaran promosi. Kos yang memenuhi standar penilaian tertulis mendapat label Kos Terverifikasi.',
+  body: 'Pasang kosmu di katalog tanpa biaya. Kalau ingin lebih banyak dilihat, ada sponsor di paket Premium dan Ultimate, tetapi penilaian survei dipisahkan dari pembayaran promosi. Kos yang memenuhi standar penilaian tertulis mendapat label Kos Terverifikasi.',
   offers: [
     { title: 'Listing gratis', body: 'Foto, harga, dan fasilitas kosmu tampil di katalog tanpa biaya.' },
-    { title: 'Promosi premium', body: 'Tampil lebih menonjol di katalog. Tidak memengaruhi hasil survei.' },
+    { title: 'Sponsor listing', body: 'Tampil lebih menonjol di katalog. Tidak memengaruhi hasil survei.' },
     {
       title: 'Komisi penghuni baru',
       body: 'Kerja sama opsional: KOSCHECK menerima komisi bila ada penghuni baru yang datang lewat katalog.',
@@ -171,7 +218,7 @@ export const faq = {
     },
     {
       q: 'Apakah pemilik kos bisa memengaruhi hasil survei?',
-      a: 'Tidak. Penilaian mengikuti standar tertulis dan dipisahkan dari pembayaran promosi. Pemilik yang memasang promosi premium tidak mendapat perlakuan khusus saat disurvei.',
+      a: 'Tidak. Penilaian mengikuti standar tertulis dan dipisahkan dari pembayaran promosi. Pemilik yang memilih sponsor listing tidak mendapat perlakuan khusus saat disurvei.',
     },
     {
       q: 'Bagaimana kalau kondisi kos berubah setelah disurvei?',
@@ -204,7 +251,7 @@ export const chat = {
   subtitle: 'Asisten AI untuk soal kos dan survei',
   greeting: 'Halo, aku asisten KOSCHECK. Mau tanya soal katalog, paket survei, atau cara pesan?',
   suggestions: [
-    'Apa bedanya Cek Dasar dan Cek Lengkap?',
+    'Apa bedanya Survei Standar dan Survei Mendalam?',
     'Kos apa yang harganya di bawah Rp900.000?',
     'Bagaimana cara pesan survei?',
   ],

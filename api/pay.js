@@ -47,9 +47,10 @@ export async function createPayment(body, env) {
   // order_id harus unik di Midtrans (maks 50 karakter)
   const orderId = `KC-${Date.now().toString(36)}-${randomBytes(3).toString('hex')}`.toUpperCase()
 
+  const itemName = plan.price === 0 ? `Survei ${plan.name}` : plan.name
   const payload = {
     transaction_details: { order_id: orderId, gross_amount: plan.price },
-    item_details: [{ id: plan.id, price: plan.price, quantity: 1, name: `Survei ${plan.name}`.slice(0, 50) }],
+    item_details: [{ id: plan.id, price: plan.price, quantity: 1, name: itemName.slice(0, 50) }],
     customer_details: { first_name: nama, phone: whatsapp },
     custom_field1: kos,
     custom_field2: catatan,

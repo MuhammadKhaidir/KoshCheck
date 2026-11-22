@@ -148,7 +148,7 @@ export default function DummyPay({ order, onFinish, onClose }) {
             <dd>{order.orderId}</dd>
           </div>
           <div>
-            <dt>Survei {order.planName}</dt>
+            <dt>{order.amount === 0 ? `Survei ${order.planName}` : order.planName}</dt>
             <dd className={s.total}>{rupiah(order.amount)}</dd>
           </div>
         </dl>

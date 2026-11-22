@@ -1,0 +1,443 @@
+diff --git a/README.md b/README.md
+index 7b1507a..eb0b0c3 100644
+--- a/README.md
++++ b/README.md
+@@ -34,7 +34,7 @@ src/
+ ## Yang perlu diisi lebih dulu
+ 
+ 1. **Nomor WhatsApp**: isi `contact.whatsapp` di `src/content/site.js` (format `6281234567890`). Selama kosong, tombol form menjadi "Salin pesan".
+-2. **Paket dan harga**: rentang Rp39.000 sampai Rp99.000 berasal dari dokumen strategi. Nama paket dan isinya (`plans.items`) adalah placeholder.
++2. **Paket dan harga**: paket pemilik ada di `ownerPlans.items` dan paket survei ada di `plans.items` di `src/content/site.js`.
+ 3. **Data katalog**: `src/data/kos.js` berisi kos fiktif. Isi `foto` dengan URL gambar bila ada.
+ 4. **Catatan simulasi**: teks di footer menyebut bahwa ini studi kasus simulasi. Hapus `disclaimer` di `site.js` bila sudah bukan simulasi.
+ 
+diff --git a/api/chat.js b/api/chat.js
+index 17e5b44..8622a07 100644
+--- a/api/chat.js
++++ b/api/chat.js
+@@ -14,7 +14,7 @@
+ 
+   Mau pakai penyedia AI lain (OpenAI, Gemini, dll)? Ubah fungsi askModel() saja.
+ */
+-import { brand, hero, plans, owners, faq, disclaimer } from '../src/content/site.js'
++import { brand, hero, freeCatalogPlan, plans, surveyPlans, ownerPlans, owners, faq, disclaimer } from '../src/content/site.js'
+ import { kos } from '../src/data/kos.js'
+ import { rupiah, tanggal } from '../src/lib/format.js'
+ 
+@@ -26,8 +26,8 @@ const daftarKos = kos
+   )
+   .join('\n')
+ 
+-const daftarPaket = plans.items
+-  .map((p) => `- ${p.name}, ${rupiah(p.price)}: ${p.summary} Isi: ${p.includes.join('; ')}.`)
++const daftarPaket = (items) => items
++  .map((p) => `- ${p.name}, ${rupiah(p.price)}${p.duration ? ` (${p.duration})` : ''}: ${p.summary} Isi: ${p.includes.join('; ')}.`)
+   .join('\n')
+ 
+ const daftarFaq = faq.items.map((i) => `T: ${i.q}\nJ: ${i.a}`).join('\n')
+@@ -43,10 +43,15 @@ Aturan menjawab:
+ 
+ Tentang layanan: ${hero.lede}
+ 
+-Paket Check Kost (berbayar):
+-${daftarPaket}
++${plans.title}:
++${plans.lede}
++${daftarPaket(surveyPlans)}
++
++${ownerPlans.title}:
++${daftarPaket(ownerPlans.items)}
+ 
+ Katalog kos (gratis, data contoh):
++${daftarPaket([freeCatalogPlan])}
+ ${daftarKos}
+ 
+ Untuk pemilik kos: ${owners.body}
+diff --git a/api/midtrans-token.js b/api/midtrans-token.js
+index f627d28..4a3054f 100644
+--- a/api/midtrans-token.js
++++ b/api/midtrans-token.js
+@@ -1,6 +1,6 @@
+-// Harga paket di README: Rp39.000 - Rp99.000. Sesuaikan kalau berubah.
+-const MIN_AMOUNT = 39000;
+-const MAX_AMOUNT = 99000;
++import { startingPrice, surveyPlans } from '../src/content/site.js';
++
++const MAX_AMOUNT = Math.max(...surveyPlans.map((plan) => plan.price));
+ 
+ export default async function handler(req, res) {
+   if (req.method !== 'POST') {
+@@ -17,7 +17,7 @@ export default async function handler(req, res) {
+ 
+   const { amount, itemName, customer } = req.body || {};
+   const gross = Number(amount);
+-  if (!Number.isInteger(gross) || gross < MIN_AMOUNT || gross > MAX_AMOUNT) {
++  if (!Number.isInteger(gross) || gross < startingPrice || gross > MAX_AMOUNT) {
+     return res.status(400).json({ error: 'amount tidak valid' });
+   }
+ 
+diff --git a/api/pay.js b/api/pay.js
+index 69b211d..b4ad4b1 100644
+--- a/api/pay.js
++++ b/api/pay.js
+@@ -47,9 +47,10 @@ export async function createPayment(body, env) {
+   // order_id harus unik di Midtrans (maks 50 karakter)
+   const orderId = `KC-${Date.now().toString(36)}-${randomBytes(3).toString('hex')}`.toUpperCase()
+ 
++  const itemName = plan.price === 0 ? `Survei ${plan.name}` : plan.name
+   const payload = {
+     transaction_details: { order_id: orderId, gross_amount: plan.price },
+-    item_details: [{ id: plan.id, price: plan.price, quantity: 1, name: `Survei ${plan.name}`.slice(0, 50) }],
++    item_details: [{ id: plan.id, price: plan.price, quantity: 1, name: itemName.slice(0, 50) }],
+     customer_details: { first_name: nama, phone: whatsapp },
+     custom_field1: kos,
+     custom_field2: catatan,
+diff --git a/src/components/pay/DummyPay.jsx b/src/components/pay/DummyPay.jsx
+index fa15e94..8d7326a 100644
+--- a/src/components/pay/DummyPay.jsx
++++ b/src/components/pay/DummyPay.jsx
+@@ -148,7 +148,7 @@ export default function DummyPay({ order, onFinish, onClose }) {
+             <dd>{order.orderId}</dd>
+           </div>
+           <div>
+-            <dt>Survei {order.planName}</dt>
++            <dt>{order.amount === 0 ? `Survei ${order.planName}` : order.planName}</dt>
+             <dd className={s.total}>{rupiah(order.amount)}</dd>
+           </div>
+         </dl>
+diff --git a/src/components/sections/Order.jsx b/src/components/sections/Order.jsx
+index 8b133f2..ed802de 100644
+--- a/src/components/sections/Order.jsx
++++ b/src/components/sections/Order.jsx
+@@ -30,7 +30,7 @@ function composeMessage(f) {
+   const catatan = f.catatan.trim() ? ` Catatan: ${f.catatan.trim()}` : ''
+   const plan = plans.items.find((p) => p.id === f.paket) ?? plans.items[0]
+   const kos = f.kos.trim() || '(nama kos atau link iklan)'
+-  return `Halo ${brand.name}, saya ${nama}. Saya ingin memesan survei ${plan.name} (${rupiah(plan.price)}) untuk kos: ${kos}.${catatan}`
++  return `Halo ${brand.name}, saya ${nama}. Saya ingin memesan ${plan.price === 0 ? 'survei ' : ''}${plan.name} (${rupiah(plan.price)}) untuk kos: ${kos}.${catatan}`
+ }
+ 
+ /** Kirim JSON ke backend. Melempar Error dengan pesan yang aman ditampilkan ke pengguna. */
+@@ -140,7 +140,7 @@ export default function Order() {
+     ? ''
+     : done.kind === 'listing'
+       ? `Halo ${brand.name}, saya ${done.nama}. Saya sudah mendaftarkan kos ${done.kos} (nomor ${done.id}).`
+-      : `Halo ${brand.name}, saya ${done.order.nama}. Pesanan ${done.order.orderId}: survei ${done.order.planName} untuk kos ${done.order.kos}.` +
++      : `Halo ${brand.name}, saya ${done.order.nama}. Pesanan ${done.order.orderId}: ${done.order.amount === 0 ? 'survei ' : ''}${done.order.planName} untuk kos ${done.order.kos}.` +
+         (done.state === 'paid' ? ' Pembayaran sudah selesai.' : '')
+   const confirmUrl = confirmText && contact.whatsapp ? `https://wa.me/${contact.whatsapp}?text=${encodeURIComponent(confirmText)}` : ''
+ 
+@@ -248,7 +248,7 @@ export default function Order() {
+                 <>
+                   <p className={s.previewLabel}>Yang kamu bayar</p>
+                   <p className={s.previewText}>
+-                    Survei {plan.name}, {rupiah(plan.price)}. Metode pembayaran dipilih di langkah berikutnya.
++                    {plan.price === 0 ? 'Survei ' : ''}{plan.name}, {rupiah(plan.price)}. Metode pembayaran dipilih di langkah berikutnya.
+                   </p>
+                 </>
+               ) : (
+diff --git a/src/components/sections/Plans.jsx b/src/components/sections/Plans.jsx
+index d744ee9..9667805 100644
+--- a/src/components/sections/Plans.jsx
++++ b/src/components/sections/Plans.jsx
+@@ -2,7 +2,7 @@ import Section from '../ui/Section.jsx'
+ import SectionHead from '../ui/SectionHead.jsx'
+ import Icon from '../ui/Icon.jsx'
+ import OrderButton from '../ui/OrderButton.jsx'
+-import { plans } from '../../content/site.js'
++import { freeCatalogPlan, ownerPlans, plans, surveyPlans } from '../../content/site.js'
+ import { rupiah } from '../../lib/format.js'
+ import s from './Plans.module.css'
+ 
+@@ -10,7 +10,7 @@ export default function Plans() {
+   const { compare } = plans
+   const bars = [
+     { ...compare.selfTrip, kind: 'trip' },
+-    ...[...plans.items].sort((a, b) => b.price - a.price).map((p) => ({ label: p.name, price: p.price, kind: 'plan' })),
++    ...[...surveyPlans].sort((a, b) => b.price - a.price).map((p) => ({ label: p.name, price: p.price, kind: 'plan' })),
+   ]
+   const max = Math.max(...bars.map((b) => b.price))
+ 
+@@ -38,33 +38,52 @@ export default function Plans() {
+           <p className={s.compareNote}>{compare.note}</p>
+         </figure>
+ 
+-        <ul className={s.plans}>
+-          {plans.items.map((plan) => (
+-            <li key={plan.id} className={s.plan} data-featured={plan.featured ? 'true' : 'false'}>
+-              <div>
+-                <h3 className={s.planName}>{plan.name}</h3>
+-                <p className={s.planSummary}>{plan.summary}</p>
+-              </div>
+-              <p className={s.price}>{rupiah(plan.price)}</p>
+-              <ul className={s.includes}>
+-                {plan.includes.map((line) => (
+-                  <li key={line}>
+-                    <Icon name="check" size={18} />
+-                    <span>{line}</span>
+-                  </li>
+-                ))}
+-              </ul>
+-              <OrderButton
+-                intent={{ mode: 'survei', plan: plan.id }}
+-                variant={plan.featured ? 'marker' : 'secondary'}
+-                className={s.cta}
+-              >
+-                Pilih {plan.name}
+-              </OrderButton>
+-            </li>
+-          ))}
+-        </ul>
++        <PlanCards items={surveyPlans} survey />
++      </div>
++      <div className={s.planGroup}>
++        <PlanCards items={[freeCatalogPlan]} survey />
++      </div>
++
++      <div className={s.planGroup}>
++        <SectionHead title={ownerPlans.title} lede={ownerPlans.lede} />
++        <PlanCards items={ownerPlans.items} />
+       </div>
+     </Section>
+   )
+ }
++
++function PlanCards({ items, survey = false }) {
++  return (
++    <ul className={survey ? s.plans : `${s.plans} ${s.ownerPlans}`}>
++      {items.map((plan) => (
++        <li key={plan.id} className={s.plan} data-featured={plan.featured ? 'true' : 'false'}>
++          <div>
++            <h3 className={s.planName}>{plan.name}</h3>
++            <p className={s.planSummary}>{plan.summary}</p>
++          </div>
++          <div>
++            <p className={s.price}>{rupiah(plan.price)}</p>
++            {plan.duration && <p className={s.planSummary}>{plan.duration}</p>}
++          </div>
++          <ul className={s.includes}>
++            {plan.includes.map((line) => (
++              <li key={line}>
++                <Icon name="check" size={18} />
++                <span>{line}</span>
++              </li>
++            ))}
++          </ul>
++          {survey && (
++            <OrderButton
++              intent={{ mode: 'survei', plan: plan.id }}
++              variant={plan.featured ? 'marker' : 'secondary'}
++              className={s.cta}
++            >
++              Pilih {plan.name}
++            </OrderButton>
++          )}
++        </li>
++      ))}
++    </ul>
++  )
++}
+diff --git a/src/components/sections/Plans.module.css b/src/components/sections/Plans.module.css
+index 5de545b..311bd24 100644
+--- a/src/components/sections/Plans.module.css
++++ b/src/components/sections/Plans.module.css
+@@ -77,6 +77,16 @@
+   }
+ }
+ 
++.planGroup {
++  margin-top: var(--space-8);
++}
++
++@media (min-width: 62rem) {
++  .ownerPlans {
++    grid-template-columns: repeat(3, minmax(0, 1fr));
++  }
++}
++
+ .plan {
+   display: flex;
+   flex-direction: column;
+@@ -118,6 +128,7 @@
+ 
+ .includes {
+   display: grid;
++  align-content: start;
+   gap: var(--space-3);
+   flex: 1;
+   padding-top: var(--space-4);
+diff --git a/src/content/site.js b/src/content/site.js
+index f9c89e0..81bfc84 100644
+--- a/src/content/site.js
++++ b/src/content/site.js
+@@ -35,31 +35,77 @@ export const headerNav = [
+   ...nav.filter((item) => item.href !== '#masalah'),
+ ]
+ 
+-/*
+-  Paket Check Kost.
+-  Rentang harga Rp39.000 sampai Rp99.000 berasal dari dokumen strategi KOSCHECK.
+-  Nama paket dan isinya adalah placeholder: sesuaikan dengan layanan yang sebenarnya.
+-*/
+-export const plans = {
+-  title: 'Survei dari rumah lebih murah daripada berangkat sendiri.',
+-  lede: 'Katalog gratis untuk semua orang. Layanan Check Kost berbayar untuk kos yang benar-benar kamu taksir.',
++const ownerBasics = [
++  'Listing kos di katalog',
++  'WhatsApp Agent KOSCHECK',
++  'Pengelolaan informasi kos',
++  'Statistik dasar',
++  'Pencatatan keuangan dasar',
++]
++
++export const ownerPlans = {
++  title: 'Paket Pemilik Kos',
++  lede: 'Kelola listing dan informasi kos dengan Free, atau pilih paket berbayar untuk dukungan pemasaran.',
+   items: [
+-        {
++    {
+       id: 'free',
+-      name: 'Gratis',
++      name: 'Free',
+       price: 0,
+-      summary: 'Untuk mengetahui kos yang tersedia di website kami serta didaerah Palembang.',
++      duration: 'Selamanya',
++      summary: 'Untuk mulai menampilkan dan mengelola kos di KOSCHECK.',
++      includes: ownerBasics,
++    },
++    {
++      id: 'premium',
++      name: 'Premium',
++      price: 49000,
++      duration: '90 hari',
++      summary: 'Untuk memperluas jangkauan listing dan melihat hasil pemasaran.',
++      includes: [...ownerBasics, 'Sponsor bergilir', 'Analitik pemasaran', '1 putaran follow-up'],
++    },
++    {
++      id: 'ultimate',
++      name: 'Ultimate',
++      price: 199000,
++      duration: '180 hari',
++      featured: true,
++      summary: 'Untuk promosi dengan penempatan prioritas dan pengelolaan keuangan lebih lengkap.',
+       includes: [
+-        'Foto Luar Kos',
+-        'Contact Person',
+-        'Daftar Fasilitas yang Tersedia (Belum Terverifikasi)',
++        ...ownerBasics,
++        'Sponsor prioritas',
++        'Analitik pemasaran',
++        'Banner fisik 1 × 2 meter (satu kali)',
++        'Desain promosi',
++        'Publikasi media sosial (satu kali)',
++        '2 putaran follow-up',
++        'Keuangan lanjutan',
+       ],
+     },
++  ],
++}
++
++export const freeCatalogPlan = {
++  id: 'free',
++  name: 'Gratis',
++  price: 0,
++  summary: 'Untuk mengetahui kos yang tersedia di website kami serta didaerah Palembang.',
++  includes: [
++    'Foto Luar Kos',
++    'Contact Person',
++    'Daftar Fasilitas yang Tersedia (Belum Terverifikasi)',
++  ],
++}
++
++export const plans = {
++  title: 'Paket Pencari Kos',
++  lede: 'Katalog gratis untuk semua orang. Kedua paket survei mencakup akses penuh ke laporan selama 180 hari.',
++  items: [
++    freeCatalogPlan,
+     {
+       id: 'dasar',
+-      name: 'Cek Dasar',
+-      price: 39000,
+-      summary: 'Untuk menyaring kos sebelum kamu memutuskan datang.',
++      name: 'Survei Standar',
++      price: 89000,
++      summary: 'Pemeriksaan dasar untuk satu kos dan satu kamar.',
+       includes: [
+         'Foto dan video terbaru dari lokasi',
+         'Pencocokan isi iklan dengan kondisi aktual',
+@@ -68,12 +114,12 @@ export const plans = {
+     },
+     {
+       id: 'lengkap',
+-      name: 'Cek Lengkap',
+-      price: 99000,
++      name: 'Survei Mendalam',
++      price: 149000,
+       featured: true,
+-      summary: 'Untuk kos yang sudah hampir kamu pilih.',
++      summary: 'Pemeriksaan lebih terperinci untuk kos yang sudah hampir kamu pilih.',
+       includes: [
+-        'Semua isi Cek Dasar',
++        'Semua pemeriksaan Survei Standar',
+         'Pemeriksaan kebersihan dan lingkungan sekitar',
+         'Laporan digital lengkap dengan catatan surveyor',
+       ],
+@@ -86,11 +132,12 @@ export const plans = {
+       price: 164000,
+       detail: `Tiket kereta pulang-pergi ${rupiah(64000)} ditambah semalam di kos harian ${rupiah(100000)}, belum termasuk makan dan transportasi lokal.`,
+     },
+-    note: 'Perhitungan simulasi. Harga paket adalah asumsi.',
++    note: 'Simulasi biaya perjalanan. Biaya aktual bisa berbeda.',
+   },
+ }
+ 
+-export const startingPrice = Math.min(...plans.items.map((p) => p.price))
++export const surveyPlans = plans.items.filter((plan) => plan.price > 0)
++export const startingPrice = Math.min(...surveyPlans.map((plan) => plan.price))
+ 
+ export const hero = {
+   badge: 'Survei Kos Modern & Terpercaya',
+@@ -149,10 +196,10 @@ export const catalog = {
+ 
+ export const owners = {
+   statement: 'Hasil survei tidak bisa dibeli.',
+-  body: 'Pasang kosmu di katalog tanpa biaya. Kalau ingin lebih banyak dilihat, ada promosi premium, tetapi penilaian survei dipisahkan dari pembayaran promosi. Kos yang memenuhi standar penilaian tertulis mendapat label Kos Terverifikasi.',
++  body: 'Pasang kosmu di katalog tanpa biaya. Kalau ingin lebih banyak dilihat, ada sponsor di paket Premium dan Ultimate, tetapi penilaian survei dipisahkan dari pembayaran promosi. Kos yang memenuhi standar penilaian tertulis mendapat label Kos Terverifikasi.',
+   offers: [
+     { title: 'Listing gratis', body: 'Foto, harga, dan fasilitas kosmu tampil di katalog tanpa biaya.' },
+-    { title: 'Promosi premium', body: 'Tampil lebih menonjol di katalog. Tidak memengaruhi hasil survei.' },
++    { title: 'Sponsor listing', body: 'Tampil lebih menonjol di katalog. Tidak memengaruhi hasil survei.' },
+     {
+       title: 'Komisi penghuni baru',
+       body: 'Kerja sama opsional: KOSCHECK menerima komisi bila ada penghuni baru yang datang lewat katalog.',
+@@ -171,7 +218,7 @@ export const faq = {
+     },
+     {
+       q: 'Apakah pemilik kos bisa memengaruhi hasil survei?',
+-      a: 'Tidak. Penilaian mengikuti standar tertulis dan dipisahkan dari pembayaran promosi. Pemilik yang memasang promosi premium tidak mendapat perlakuan khusus saat disurvei.',
++      a: 'Tidak. Penilaian mengikuti standar tertulis dan dipisahkan dari pembayaran promosi. Pemilik yang memilih sponsor listing tidak mendapat perlakuan khusus saat disurvei.',
+     },
+     {
+       q: 'Bagaimana kalau kondisi kos berubah setelah disurvei?',
+@@ -204,7 +251,7 @@ export const chat = {
+   subtitle: 'Asisten AI untuk soal kos dan survei',
+   greeting: 'Halo, aku asisten KOSCHECK. Mau tanya soal katalog, paket survei, atau cara pesan?',
+   suggestions: [
+-    'Apa bedanya Cek Dasar dan Cek Lengkap?',
++    'Apa bedanya Survei Standar dan Survei Mendalam?',
+     'Kos apa yang harganya di bawah Rp900.000?',
+     'Bagaimana cara pesan survei?',
+   ],
+diff --git a/src/lib/api.js b/src/lib/api.js
+index bf98f37..6c48e18 100644
+--- a/src/lib/api.js
++++ b/src/lib/api.js
+@@ -26,7 +26,7 @@ function loadSnap(src, clientKey) {
+   });
+ }
+ 
+-// payWithSnap({ amount: 49000, itemName: 'Paket Cek Kos', customer: { name, email, phone } })
++// payWithSnap({ amount: 89000, itemName: 'Survei Standar', customer: { name, email, phone } })
+ export async function payWithSnap(payload) {
+   const { token, clientKey, snapUrl } = await postJSON('/api/midtrans-token', payload);
+   await loadSnap(snapUrl, clientKey);

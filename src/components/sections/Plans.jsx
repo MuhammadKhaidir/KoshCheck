@@ -2,7 +2,7 @@ import Section from '../ui/Section.jsx'
 import SectionHead from '../ui/SectionHead.jsx'
 import Icon from '../ui/Icon.jsx'
 import OrderButton from '../ui/OrderButton.jsx'
-import { plans } from '../../content/site.js'
+import { freeCatalogPlan, ownerPlans, plans, surveyPlans } from '../../content/site.js'
 import { rupiah } from '../../lib/format.js'
 import s from './Plans.module.css'
 
@@ -10,7 +10,7 @@ export default function Plans() {
   const { compare } = plans
   const bars = [
     { ...compare.selfTrip, kind: 'trip' },
-    ...[...plans.items].sort((a, b) => b.price - a.price).map((p) => ({ label: p.name, price: p.price, kind: 'plan' })),
+    ...[...surveyPlans].sort((a, b) => b.price - a.price).map((p) => ({ label: p.name, price: p.price, kind: 'plan' })),
   ]
   const max = Math.max(...bars.map((b) => b.price))
 
@@ -38,33 +38,52 @@ export default function Plans() {
           <p className={s.compareNote}>{compare.note}</p>
         </figure>
 
-        <ul className={s.plans}>
-          {plans.items.map((plan) => (
-            <li key={plan.id} className={s.plan} data-featured={plan.featured ? 'true' : 'false'}>
-              <div>
-                <h3 className={s.planName}>{plan.name}</h3>
-                <p className={s.planSummary}>{plan.summary}</p>
-              </div>
-              <p className={s.price}>{rupiah(plan.price)}</p>
-              <ul className={s.includes}>
-                {plan.includes.map((line) => (
-                  <li key={line}>
-                    <Icon name="check" size={18} />
-                    <span>{line}</span>
-                  </li>
-                ))}
-              </ul>
-              <OrderButton
-                intent={{ mode: 'survei', plan: plan.id }}
-                variant={plan.featured ? 'marker' : 'secondary'}
-                className={s.cta}
-              >
-                Pilih {plan.name}
-              </OrderButton>
-            </li>
-          ))}
-        </ul>
+        <PlanCards items={surveyPlans} survey />
+      </div>
+      <div className={s.planGroup}>
+        <PlanCards items={[freeCatalogPlan]} survey />
+      </div>
+
+      <div className={s.planGroup}>
+        <SectionHead title={ownerPlans.title} lede={ownerPlans.lede} />
+        <PlanCards items={ownerPlans.items} />
       </div>
     </Section>
+  )
+}
+
+function PlanCards({ items, survey = false }) {
+  return (
+    <ul className={survey ? s.plans : `${s.plans} ${s.ownerPlans}`}>
+      {items.map((plan) => (
+        <li key={plan.id} className={s.plan} data-featured={plan.featured ? 'true' : 'false'}>
+          <div>
+            <h3 className={s.planName}>{plan.name}</h3>
+            <p className={s.planSummary}>{plan.summary}</p>
+          </div>
+          <div>
+            <p className={s.price}>{rupiah(plan.price)}</p>
+            {plan.duration && <p className={s.planSummary}>{plan.duration}</p>}
+          </div>
+          <ul className={s.includes}>
+            {plan.includes.map((line) => (
+              <li key={line}>
+                <Icon name="check" size={18} />
+                <span>{line}</span>
+              </li>
+            ))}
+          </ul>
+          {survey && (
+            <OrderButton
+              intent={{ mode: 'survei', plan: plan.id }}
+              variant={plan.featured ? 'marker' : 'secondary'}
+              className={s.cta}
+            >
+              Pilih {plan.name}
+            </OrderButton>
+          )}
+        </li>
+      ))}
+    </ul>
   )
 }

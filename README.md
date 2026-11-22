@@ -34,7 +34,7 @@ src/
 ## Yang perlu diisi lebih dulu
 
 1. **Nomor WhatsApp**: isi `contact.whatsapp` di `src/content/site.js` (format `6281234567890`). Selama kosong, tombol form menjadi "Salin pesan".
-2. **Paket dan harga**: rentang Rp39.000 sampai Rp99.000 berasal dari dokumen strategi. Nama paket dan isinya (`plans.items`) adalah placeholder.
+2. **Paket dan harga**: paket pemilik ada di `ownerPlans.items` dan paket survei ada di `plans.items` di `src/content/site.js`.
 3. **Data katalog**: `src/data/kos.js` berisi kos fiktif. Isi `foto` dengan URL gambar bila ada.
 4. **Catatan simulasi**: teks di footer menyebut bahwa ini studi kasus simulasi. Hapus `disclaimer` di `site.js` bila sudah bukan simulasi.
 

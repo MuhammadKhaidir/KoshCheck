@@ -77,6 +77,16 @@
   }
 }
 
+.planGroup {
+  margin-top: var(--space-8);
+}
+
+@media (min-width: 62rem) {
+  .ownerPlans {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
 .plan {
   display: flex;
   flex-direction: column;
@@ -118,6 +128,7 @@
 
 .includes {
   display: grid;
+  align-content: start;
   gap: var(--space-3);
   flex: 1;
   padding-top: var(--space-4);

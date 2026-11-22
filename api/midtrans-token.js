@@ -1,6 +1,6 @@
-// Harga paket di README: Rp39.000 - Rp99.000. Sesuaikan kalau berubah.
-const MIN_AMOUNT = 39000;
-const MAX_AMOUNT = 99000;
+import { startingPrice, surveyPlans } from '../src/content/site.js';
+
+const MAX_AMOUNT = Math.max(...surveyPlans.map((plan) => plan.price));
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -17,7 +17,7 @@ export default async function handler(req, res) {
 
   const { amount, itemName, customer } = req.body || {};
   const gross = Number(amount);
-  if (!Number.isInteger(gross) || gross < MIN_AMOUNT || gross > MAX_AMOUNT) {
+  if (!Number.isInteger(gross) || gross < startingPrice || gross > MAX_AMOUNT) {
     return res.status(400).json({ error: 'amount tidak valid' });
   }
 
