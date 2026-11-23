@@ -19,6 +19,7 @@ export async function createOrder(body, env) {
   const whatsapp = clip(body?.whatsapp, 20).replace(/[^\d+]/g, '')
 
   if (!plan) return { status: 400, data: { error: 'Paket tidak dikenal.' } }
+  if (plan.price <= 0) return { status: 400, data: { error: 'Paket gratis tidak perlu dipesan atau dibayar.' } }
   if (!nama || !kos) return { status: 400, data: { error: 'Nama dan kos wajib diisi.' } }
   if (whatsapp.replace(/\D/g, '').length < 8) return { status: 400, data: { error: 'Nomor WhatsApp belum benar.' } }
 

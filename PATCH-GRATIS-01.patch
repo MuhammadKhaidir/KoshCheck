@@ -1,0 +1,147 @@
+diff --git a/api/orders.js b/api/orders.js
+index ed7ca67..7f445d7 100644
+--- a/api/orders.js
++++ b/api/orders.js
+@@ -19,6 +19,7 @@ export async function createOrder(body, env) {
+   const whatsapp = clip(body?.whatsapp, 20).replace(/[^\d+]/g, '')
+ 
+   if (!plan) return { status: 400, data: { error: 'Paket tidak dikenal.' } }
++  if (plan.price <= 0) return { status: 400, data: { error: 'Paket gratis tidak perlu dipesan atau dibayar.' } }
+   if (!nama || !kos) return { status: 400, data: { error: 'Nama dan kos wajib diisi.' } }
+   if (whatsapp.replace(/\D/g, '').length < 8) return { status: 400, data: { error: 'Nomor WhatsApp belum benar.' } }
+ 
+diff --git a/api/pay.js b/api/pay.js
+index b4ad4b1..1a59ff2 100644
+--- a/api/pay.js
++++ b/api/pay.js
+@@ -41,6 +41,7 @@ export async function createPayment(body, env) {
+   const whatsapp = clip(body?.whatsapp, 20).replace(/[^\d+]/g, '')
+ 
+   if (!plan) return { status: 400, data: { error: 'Paket tidak dikenal.' } }
++  if (plan.price <= 0) return { status: 400, data: { error: 'Paket gratis tidak perlu dipesan atau dibayar.' } }
+   if (!nama || !kos) return { status: 400, data: { error: 'Nama dan kos wajib diisi.' } }
+   if (whatsapp.replace(/\D/g, '').length < 8) return { status: 400, data: { error: 'Nomor WhatsApp belum benar.' } }
+ 
+diff --git a/src/components/sections/Order.jsx b/src/components/sections/Order.jsx
+index ed802de..e37e6c6 100644
+--- a/src/components/sections/Order.jsx
++++ b/src/components/sections/Order.jsx
+@@ -4,7 +4,7 @@ import SectionHead from '../ui/SectionHead.jsx'
+ import Button from '../ui/Button.jsx'
+ import DummyPay from '../pay/DummyPay.jsx'
+ import { useOrderIntent } from '../../context/OrderIntent.jsx'
+-import { order, plans, contact, brand } from '../../content/site.js'
++import { order, surveyPlans, contact, brand } from '../../content/site.js'
+ import { rupiah } from '../../lib/format.js'
+ import s from './Order.module.css'
+ 
+@@ -14,7 +14,8 @@ const MODES = [
+ ]
+ 
+ const initialForms = {
+-  survei: { nama: '', whatsapp: '', kos: '', paket: plans.items[0].id, catatan: '' },
++  // Hanya paket berbayar. Paket Gratis (katalog) tidak dipesan lewat form ini, jadi tidak ada "Bayar Rp0".
++  survei: { nama: '', whatsapp: '', kos: '', paket: surveyPlans[0].id, catatan: '' },
+   pemilik: { nama: '', whatsapp: '', kos: '', area: '', catatan: '' },
+ }
+ 
+@@ -28,9 +29,9 @@ const PAY_MESSAGE = {
+ function composeMessage(f) {
+   const nama = f.nama.trim() || '(nama)'
+   const catatan = f.catatan.trim() ? ` Catatan: ${f.catatan.trim()}` : ''
+-  const plan = plans.items.find((p) => p.id === f.paket) ?? plans.items[0]
++  const plan = surveyPlans.find((p) => p.id === f.paket) ?? surveyPlans[0]
+   const kos = f.kos.trim() || '(nama kos atau link iklan)'
+-  return `Halo ${brand.name}, saya ${nama}. Saya ingin memesan ${plan.price === 0 ? 'survei ' : ''}${plan.name} (${rupiah(plan.price)}) untuk kos: ${kos}.${catatan}`
++  return `Halo ${brand.name}, saya ${nama}. Saya ingin memesan ${plan.name} (${rupiah(plan.price)}) untuk kos: ${kos}.${catatan}`
+ }
+ 
+ /** Kirim JSON ke backend. Melempar Error dengan pesan yang aman ditampilkan ke pengguna. */
+@@ -68,7 +69,7 @@ export default function Order() {
+         ...prev,
+         survei: {
+           ...prev.survei,
+-          ...(intent.plan && { paket: intent.plan }),
++          ...(surveyPlans.some((p) => p.id === intent.plan) && { paket: intent.plan }),
+           ...(intent.kos && { kos: intent.kos }),
+         },
+       }))
+@@ -84,7 +85,7 @@ export default function Order() {
+   const waMessage = composeMessage(forms.survei)
+   const waUrl = contact.whatsapp ? `https://wa.me/${contact.whatsapp}?text=${encodeURIComponent(waMessage)}` : ''
+ 
+-  const plan = plans.items.find((p) => p.id === forms.survei.paket) ?? plans.items[0]
++  const plan = surveyPlans.find((p) => p.id === forms.survei.paket) ?? surveyPlans[0]
+ 
+   /** Pesan survei: simpan pesanan ke backend (/api/orders), lalu buka tampilan pembayaran dummy. */
+   async function startOrder() {
+@@ -140,7 +141,7 @@ export default function Order() {
+     ? ''
+     : done.kind === 'listing'
+       ? `Halo ${brand.name}, saya ${done.nama}. Saya sudah mendaftarkan kos ${done.kos} (nomor ${done.id}).`
+-      : `Halo ${brand.name}, saya ${done.order.nama}. Pesanan ${done.order.orderId}: ${done.order.amount === 0 ? 'survei ' : ''}${done.order.planName} untuk kos ${done.order.kos}.` +
++      : `Halo ${brand.name}, saya ${done.order.nama}. Pesanan ${done.order.orderId}: ${done.order.planName} untuk kos ${done.order.kos}.` +
+         (done.state === 'paid' ? ' Pembayaran sudah selesai.' : '')
+   const confirmUrl = confirmText && contact.whatsapp ? `https://wa.me/${contact.whatsapp}?text=${encodeURIComponent(confirmText)}` : ''
+ 
+@@ -217,7 +218,7 @@ export default function Order() {
+               <div className={s.field}>
+                 <label htmlFor={id('paket')}>Paket</label>
+                 <select id={id('paket')} value={form.paket} onChange={update('paket')}>
+-                  {plans.items.map((p) => (
++                  {surveyPlans.map((p) => (
+                     <option key={p.id} value={p.id}>
+                       {p.name}, {rupiah(p.price)}
+                     </option>
+@@ -248,7 +249,7 @@ export default function Order() {
+                 <>
+                   <p className={s.previewLabel}>Yang kamu bayar</p>
+                   <p className={s.previewText}>
+-                    {plan.price === 0 ? 'Survei ' : ''}{plan.name}, {rupiah(plan.price)}. Metode pembayaran dipilih di langkah berikutnya.
++                    {plan.name}, {rupiah(plan.price)}. Metode pembayaran dipilih di langkah berikutnya.
+                   </p>
+                 </>
+               ) : (
+diff --git a/src/components/sections/Plans.jsx b/src/components/sections/Plans.jsx
+index 9667805..3ffde07 100644
+--- a/src/components/sections/Plans.jsx
++++ b/src/components/sections/Plans.jsx
+@@ -1,6 +1,7 @@
+ import Section from '../ui/Section.jsx'
+ import SectionHead from '../ui/SectionHead.jsx'
+ import Icon from '../ui/Icon.jsx'
++import Button from '../ui/Button.jsx'
+ import OrderButton from '../ui/OrderButton.jsx'
+ import { freeCatalogPlan, ownerPlans, plans, surveyPlans } from '../../content/site.js'
+ import { rupiah } from '../../lib/format.js'
+@@ -73,15 +74,21 @@ function PlanCards({ items, survey = false }) {
+               </li>
+             ))}
+           </ul>
+-          {survey && (
+-            <OrderButton
+-              intent={{ mode: 'survei', plan: plan.id }}
+-              variant={plan.featured ? 'marker' : 'secondary'}
+-              className={s.cta}
+-            >
+-              Pilih {plan.name}
+-            </OrderButton>
+-          )}
++          {survey &&
++            (plan.price > 0 ? (
++              <OrderButton
++                intent={{ mode: 'survei', plan: plan.id }}
++                variant={plan.featured ? 'marker' : 'secondary'}
++                className={s.cta}
++              >
++                Pilih {plan.name}
++              </OrderButton>
++            ) : (
++              // Paket gratis tidak perlu dipesan atau dibayar: arahkan langsung ke katalog.
++              <Button href="#katalog" variant="secondary" className={s.cta}>
++                Buka katalog gratis
++              </Button>
++            ))}
+         </li>
+       ))}
+     </ul>

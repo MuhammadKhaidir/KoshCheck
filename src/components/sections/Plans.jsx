@@ -1,6 +1,7 @@
 import Section from '../ui/Section.jsx'
 import SectionHead from '../ui/SectionHead.jsx'
 import Icon from '../ui/Icon.jsx'
+import Button from '../ui/Button.jsx'
 import OrderButton from '../ui/OrderButton.jsx'
 import { freeCatalogPlan, ownerPlans, plans, surveyPlans } from '../../content/site.js'
 import { rupiah } from '../../lib/format.js'
@@ -73,15 +74,21 @@ function PlanCards({ items, survey = false }) {
               </li>
             ))}
           </ul>
-          {survey && (
-            <OrderButton
-              intent={{ mode: 'survei', plan: plan.id }}
-              variant={plan.featured ? 'marker' : 'secondary'}
-              className={s.cta}
-            >
-              Pilih {plan.name}
-            </OrderButton>
-          )}
+          {survey &&
+            (plan.price > 0 ? (
+              <OrderButton
+                intent={{ mode: 'survei', plan: plan.id }}
+                variant={plan.featured ? 'marker' : 'secondary'}
+                className={s.cta}
+              >
+                Pilih {plan.name}
+              </OrderButton>
+            ) : (
+              // Paket gratis tidak perlu dipesan atau dibayar: arahkan langsung ke katalog.
+              <Button href="#katalog" variant="secondary" className={s.cta}>
+                Buka katalog gratis
+              </Button>
+            ))}
         </li>
       ))}
     </ul>

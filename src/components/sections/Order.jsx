@@ -4,7 +4,7 @@ import SectionHead from '../ui/SectionHead.jsx'
 import Button from '../ui/Button.jsx'
 import DummyPay from '../pay/DummyPay.jsx'
 import { useOrderIntent } from '../../context/OrderIntent.jsx'
-import { order, plans, contact, brand } from '../../content/site.js'
+import { order, surveyPlans, contact, brand } from '../../content/site.js'
 import { rupiah } from '../../lib/format.js'
 import s from './Order.module.css'
 
@@ -14,7 +14,8 @@ const MODES = [
 ]
 
 const initialForms = {
-  survei: { nama: '', whatsapp: '', kos: '', paket: plans.items[0].id, catatan: '' },
+  // Hanya paket berbayar. Paket Gratis (katalog) tidak dipesan lewat form ini, jadi tidak ada "Bayar Rp0".
+  survei: { nama: '', whatsapp: '', kos: '', paket: surveyPlans[0].id, catatan: '' },
   pemilik: { nama: '', whatsapp: '', kos: '', area: '', catatan: '' },
 }
 
@@ -28,9 +29,9 @@ const PAY_MESSAGE = {
 function composeMessage(f) {
   const nama = f.nama.trim() || '(nama)'
   const catatan = f.catatan.trim() ? ` Catatan: ${f.catatan.trim()}` : ''
-  const plan = plans.items.find((p) => p.id === f.paket) ?? plans.items[0]
+  const plan = surveyPlans.find((p) => p.id === f.paket) ?? surveyPlans[0]
   const kos = f.kos.trim() || '(nama kos atau link iklan)'
-  return `Halo ${brand.name}, saya ${nama}. Saya ingin memesan ${plan.price === 0 ? 'survei ' : ''}${plan.name} (${rupiah(plan.price)}) untuk kos: ${kos}.${catatan}`
+  return `Halo ${brand.name}, saya ${nama}. Saya ingin memesan ${plan.name} (${rupiah(plan.price)}) untuk kos: ${kos}.${catatan}`
 }
 
 /** Kirim JSON ke backend. Melempar Error dengan pesan yang aman ditampilkan ke pengguna. */
@@ -68,7 +69,7 @@ export default function Order() {
         ...prev,
         survei: {
           ...prev.survei,
-          ...(intent.plan && { paket: intent.plan }),
+          ...(surveyPlans.some((p) => p.id === intent.plan) && { paket: intent.plan }),
           ...(intent.kos && { kos: intent.kos }),
         },
       }))
@@ -84,7 +85,7 @@ export default function Order() {
   const waMessage = composeMessage(forms.survei)
   const waUrl = contact.whatsapp ? `https://wa.me/${contact.whatsapp}?text=${encodeURIComponent(waMessage)}` : ''
 
-  const plan = plans.items.find((p) => p.id === forms.survei.paket) ?? plans.items[0]
+  const plan = surveyPlans.find((p) => p.id === forms.survei.paket) ?? surveyPlans[0]
 
   /** Pesan survei: simpan pesanan ke backend (/api/orders), lalu buka tampilan pembayaran dummy. */
   async function startOrder() {
@@ -140,7 +141,7 @@ export default function Order() {
     ? ''
     : done.kind === 'listing'
       ? `Halo ${brand.name}, saya ${done.nama}. Saya sudah mendaftarkan kos ${done.kos} (nomor ${done.id}).`
-      : `Halo ${brand.name}, saya ${done.order.nama}. Pesanan ${done.order.orderId}: ${done.order.amount === 0 ? 'survei ' : ''}${done.order.planName} untuk kos ${done.order.kos}.` +
+      : `Halo ${brand.name}, saya ${done.order.nama}. Pesanan ${done.order.orderId}: ${done.order.planName} untuk kos ${done.order.kos}.` +
         (done.state === 'paid' ? ' Pembayaran sudah selesai.' : '')
   const confirmUrl = confirmText && contact.whatsapp ? `https://wa.me/${contact.whatsapp}?text=${encodeURIComponent(confirmText)}` : ''
 
@@ -217,7 +218,7 @@ export default function Order() {
               <div className={s.field}>
                 <label htmlFor={id('paket')}>Paket</label>
                 <select id={id('paket')} value={form.paket} onChange={update('paket')}>
-                  {plans.items.map((p) => (
+                  {surveyPlans.map((p) => (
                     <option key={p.id} value={p.id}>
                       {p.name}, {rupiah(p.price)}
                     </option>
@@ -248,7 +249,7 @@ export default function Order() {
                 <>
                   <p className={s.previewLabel}>Yang kamu bayar</p>
                   <p className={s.previewText}>
-                    {plan.price === 0 ? 'Survei ' : ''}{plan.name}, {rupiah(plan.price)}. Metode pembayaran dipilih di langkah berikutnya.
+                    {plan.name}, {rupiah(plan.price)}. Metode pembayaran dipilih di langkah berikutnya.
                   </p>
                 </>
               ) : (
