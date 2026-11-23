@@ -218,3 +218,33 @@
   object-fit: cover;
   border-radius: var(--radius-s);
 }
+
+.rowActions {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.actionButton {
+  padding: 0.35rem 0.6rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  background: var(--white);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.actionButton:hover:not(:disabled) {
+  background: var(--paper-sunk);
+}
+
+.actionButton:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+.deleteButton {
+  color: var(--bad);
+}

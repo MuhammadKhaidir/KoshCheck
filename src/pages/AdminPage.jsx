@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import Container from '../components/ui/Container.jsx'
 import Button from '../components/ui/Button.jsx'
 import AddListingForm from './AddListingForm.jsx'
+import AdminAnalytics from './AdminAnalytics.jsx'
 import { plans } from '../content/site.js'
 import { rupiah } from '../lib/format.js'
 import { clearToken, getToken } from '../lib/adminSession.js'
@@ -50,6 +51,9 @@ export default function AdminPage() {
   const [error, setError] = useState('')
   const [updatedAt, setUpdatedAt] = useState(null)
   const [filter, setFilter] = useState('all')
+  const [editingListing, setEditingListing] = useState(null)
+  const [listingError, setListingError] = useState('')
+  const [listingBusy, setListingBusy] = useState('')
 
   const load = useCallback(async () => {
     const token = getToken()
@@ -62,7 +66,11 @@ export default function AdminPage() {
       }
       const json = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(json.error || `HTTP ${res.status}`)
-      setData({ orders: json.orders ?? [], listings: json.listings ?? [] })
+      setData({
+        orders: json.orders ?? [],
+        listings: json.listings ?? [],
+        analytics: json.analytics ?? { orders: [], listings: [] },
+      })
       setUpdatedAt(new Date())
       setError('')
       setState('ready')
@@ -92,6 +100,32 @@ export default function AdminPage() {
   }, [orders])
 
   const shown = filter === 'all' ? orders : orders.filter((o) => o.status === filter)
+
+  async function removeListing(listing) {
+    if (!window.confirm(`Hapus listing "${listing.kos}"? Data ini akan hilang dari katalog dan halaman admin. Riwayat pesanan tidak ikut dihapus.`)) return
+    setListingBusy(listing.id)
+    setListingError('')
+    try {
+      const res = await fetch('/api/admin-listings', {
+        method: 'DELETE',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${getToken()}` },
+        body: JSON.stringify({ id: listing.id }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (res.status === 401) {
+        clearToken()
+        setState('nologin')
+        return
+      }
+      if (!res.ok) throw new Error(json.error || `HTTP ${res.status}`)
+      if (editingListing?.id === listing.id) setEditingListing(null)
+      await load()
+    } catch (err) {
+      setListingError(err.message)
+    } finally {
+      setListingBusy('')
+    }
+  }
 
   function logout() {
     clearToken()
@@ -185,6 +219,8 @@ export default function AdminPage() {
               </div>
             </dl>
 
+            <AdminAnalytics analytics={data.analytics} />
+
             <section className={s.block} aria-labelledby="admin-orders">
               <div className={s.blockHead}>
                 <h2 id="admin-orders" className={s.h2}>
@@ -262,7 +298,12 @@ export default function AdminPage() {
                 </h2>
               </div>
 
-              <AddListingForm onSaved={load} />
+              {editingListing ? (
+                <AddListingForm key={editingListing.id} listing={editingListing} onCancel={() => setEditingListing(null)} onSaved={() => { setEditingListing(null); load() }} />
+              ) : (
+                <AddListingForm onSaved={load} />
+              )}
+              {listingError && <p className={s.error} role="alert">{listingError}</p>}
 
               {listings.length === 0 ? (
                 <p className={s.empty}>Belum ada pendaftaran.</p>
@@ -279,6 +320,7 @@ export default function AdminPage() {
                         <th scope="col">Area</th>
                         <th scope="col">Catatan</th>
                         <th scope="col">No. pendaftaran</th>
+                        <th scope="col">Aksi</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -308,6 +350,16 @@ export default function AdminPage() {
                           <td className={s.wrap}>{l.area}</td>
                           <td className={s.wrap}>{l.catatan || '-'}</td>
                           <td className={s.nowrap}>{l.id}</td>
+                          <td className={s.nowrap}>
+                            <div className={s.rowActions}>
+                              <button type="button" className={s.actionButton} onClick={() => { setListingError(''); setEditingListing(l) }}>
+                                Edit
+                              </button>
+                              <button type="button" className={`${s.actionButton} ${s.deleteButton}`} disabled={listingBusy === l.id} onClick={() => removeListing(l)}>
+                                {listingBusy === l.id ? 'Menghapus…' : 'Hapus'}
+                              </button>
+                            </div>
+                          </td>
                         </tr>
                       ))}
                     </tbody>

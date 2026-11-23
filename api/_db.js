@@ -192,6 +192,43 @@ export async function insertListing(env, l) {
   return row
 }
 
+/** Ubah data listing tanpa mengubah status publik, pemilik, atau tanggal pendaftaran. */
+export async function updateListing(env, id, l) {
+  if (!usePostgres(env)) {
+    assertFileAllowed(env)
+    return updateJson((db) => {
+      const row = db.listings.find((item) => item.id === id)
+      if (!row) return null
+      Object.assign(row, l)
+      return row
+    })
+  }
+  const sql = await getSql(env)
+  const [row] = await sql`
+    update listings set
+      nama = ${l.nama}, whatsapp = ${l.whatsapp}, kos = ${l.kos},
+      area = ${l.area}, catatan = ${l.catatan}, foto = ${l.foto},
+      harga = ${l.harga}, tipe = ${l.tipe}, fasilitas = ${l.fasilitas}
+    where id = ${id}
+    returning *`
+  return row ?? null
+}
+
+/** Hapus listing. Riwayat orders sengaja tidak disentuh. */
+export async function deleteListing(env, id) {
+  if (!usePostgres(env)) {
+    assertFileAllowed(env)
+    return updateJson((db) => {
+      const index = db.listings.findIndex((item) => item.id === id)
+      if (index < 0) return null
+      return db.listings.splice(index, 1)[0]
+    })
+  }
+  const sql = await getSql(env)
+  const [row] = await sql`delete from listings where id = ${id} returning id`
+  return row ?? null
+}
+
 /** Listing yang ditandai publik (ditambah admin), untuk katalog di halaman utama. Terbaru di atas, maks 100. */
 export async function listPublicListings(env) {
   if (!usePostgres(env)) {
@@ -210,14 +247,45 @@ export async function listAll(env) {
     assertFileAllowed(env)
     const db = await readJson()
     const newest = (rows) => [...rows].reverse().slice(0, 500)
-    return { orders: newest(db.orders), listings: newest(db.listings) }
+    const summarize = (rows) => {
+      const grouped = new Map()
+      for (const row of rows) {
+        const date = new Date(row.created_at)
+        if (Number.isNaN(date.getTime())) continue
+        const parts = new Intl.DateTimeFormat('en-US', {
+          timeZone: 'Asia/Jakarta', year: 'numeric', month: 'numeric',
+        }).formatToParts(date)
+        const year = Number(parts.find((part) => part.type === 'year')?.value)
+        const month = Number(parts.find((part) => part.type === 'month')?.value)
+        const key = `${year}-${month}`
+        const item = grouped.get(key) ?? { year, month, total: 0 }
+        item.total += 1
+        grouped.set(key, item)
+      }
+      return [...grouped.values()].sort((a, b) => a.year - b.year || a.month - b.month)
+    }
+    return {
+      orders: newest(db.orders),
+      listings: newest(db.listings),
+      analytics: { orders: summarize(db.orders), listings: summarize(db.listings) },
+    }
   }
   const sql = await getSql(env)
-  const [orders, listings] = await Promise.all([
+  const [orders, listings, orderTrend, listingTrend] = await Promise.all([
     sql`select * from orders order by created_at desc limit 500`,
     sql`select * from listings order by created_at desc limit 500`,
+    sql`select
+          extract(year from created_at at time zone 'Asia/Jakarta')::int as year,
+          extract(month from created_at at time zone 'Asia/Jakarta')::int as month,
+          count(*)::int as total
+        from orders group by 1, 2 order by 1, 2`,
+    sql`select
+          extract(year from created_at at time zone 'Asia/Jakarta')::int as year,
+          extract(month from created_at at time zone 'Asia/Jakarta')::int as month,
+          count(*)::int as total
+        from listings group by 1, 2 order by 1, 2`,
   ])
-  return { orders, listings }
+  return { orders, listings, analytics: { orders: orderTrend, listings: listingTrend } }
 }
 
 /* ---------- Pemilik kos ---------- */

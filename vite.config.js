@@ -7,6 +7,7 @@ import react from '@vitejs/plugin-react'
 // Di production (Vercel), file api/*.js dipakai langsung.
 // (api/pay-notify.js tidak ada di sini: Midtrans tidak bisa memanggil localhost. Uji setelah deploy.)
 // Fungsi dipanggil sebagai fn(body, env, req). `method` bawaan POST.
+// Route dengan beberapa method memakai `fns: { METHOD: namaFungsi }` (contoh: /api/admin-listings).
 const DEV_API = {
   '/api/chat': { file: 'api/chat.js', fn: 'chat' },
   '/api/pay': { file: 'api/pay.js', fn: 'createPayment' },
@@ -16,7 +17,10 @@ const DEV_API = {
   '/api/admin': { file: 'api/admin.js', fn: 'listData', method: 'GET' },
   '/api/kos': { file: 'api/kos.js', fn: 'listKos', method: 'GET' },
   '/api/admin-login': { file: 'api/admin-login.js', fn: 'adminLogin' },
-  '/api/admin-listings': { file: 'api/admin-listings.js', fn: 'addListing' },
+  '/api/admin-listings': {
+    file: 'api/admin-listings.js',
+    fns: { POST: 'addListing', PATCH: 'editListing', DELETE: 'deleteListing' },
+  },
   '/api/owner': { file: 'api/owner.js', fn: 'ownerApi' },
 }
 
@@ -25,13 +29,15 @@ function devApi(env) {
     name: 'dev-api',
     apply: 'serve',
     configureServer(server) {
-      for (const [route, { file, fn, method = 'POST' }] of Object.entries(DEV_API)) {
+      for (const [route, { file, fn, fns, method = 'POST' }] of Object.entries(DEV_API)) {
+        const handlers = fns ?? { [method]: fn }
         server.middlewares.use(route, async (req, res) => {
           let status = 405
-          let data = { error: `Gunakan ${method}.` }
-          if (req.method === method) {
+          let data = { error: `Gunakan ${Object.keys(handlers).join(', ')}.` }
+          const name = handlers[req.method]
+          if (name) {
             let body = {}
-            if (method === 'POST') {
+            if (req.method !== 'GET') {
               let raw = ''
               for await (const part of req) raw += part
               try {
@@ -41,7 +47,7 @@ function devApi(env) {
               }
             }
             const url = pathToFileURL(path.resolve(file)).href + `?t=${Date.now()}`
-            ;({ status, data } = await (await import(url))[fn](body, env, req))
+            ;({ status, data } = await (await import(url))[name](body, env, req))
           }
           res.statusCode = status
           res.setHeader('content-type', 'application/json')

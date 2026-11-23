@@ -8,10 +8,15 @@ import s from './AddListingForm.module.css'
 const EMPTY = { nama: '', whatsapp: '', kos: '', area: '', catatan: '', tipe: '', harga: '' }
 
 /** Form tambah listing kos (+ foto) di halaman database. onSaved() dipanggil setelah berhasil disimpan. */
-export default function AddListingForm({ onSaved }) {
-  const [form, setForm] = useState(EMPTY)
-  const [fasilitas, setFasilitas] = useState([])
-  const [foto, setFoto] = useState('')
+export default function AddListingForm({ onSaved, listing = null, onCancel }) {
+  const editing = Boolean(listing)
+  const [form, setForm] = useState(() => listing ? {
+    nama: listing.nama ?? '', whatsapp: listing.whatsapp ?? '', kos: listing.kos ?? '',
+    area: listing.area ?? '', catatan: listing.catatan ?? '', tipe: listing.tipe ?? '',
+    harga: listing.harga == null ? '' : String(listing.harga),
+  } : EMPTY)
+  const [fasilitas, setFasilitas] = useState(() => String(listing?.fasilitas ?? '').split(',').map((item) => item.trim()).filter(Boolean))
+  const [foto, setFoto] = useState(listing?.foto ?? '')
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState(null) // { ok: boolean, text: string }
   const fileRef = useRef(null)
@@ -43,10 +48,11 @@ export default function AddListingForm({ onSaved }) {
     setBusy(true)
     setMsg(null)
     try {
+      const method = editing ? 'PATCH' : 'POST'
       const res = await fetch('/api/admin-listings', {
-        method: 'POST',
+        method,
         headers: { 'content-type': 'application/json', authorization: `Bearer ${getToken()}` },
-        body: JSON.stringify({ ...form, harga: Number(form.harga), fasilitas, foto }),
+        body: JSON.stringify({ ...form, id: listing?.id, harga: Number(form.harga), fasilitas, foto }),
       })
       const json = await res.json().catch(() => ({}))
       if (res.status === 401) {
@@ -55,10 +61,12 @@ export default function AddListingForm({ onSaved }) {
         return
       }
       if (!res.ok) throw new Error(json.error || `HTTP ${res.status}`)
-      setForm(EMPTY)
-      setFasilitas([])
-      removeFoto()
-      setMsg({ ok: true, text: `Listing tersimpan dan tayang di katalog (${json.listingId}).` })
+      if (!editing) {
+        setForm(EMPTY)
+        setFasilitas([])
+        removeFoto()
+      }
+      setMsg({ ok: true, text: editing ? 'Perubahan listing berhasil disimpan.' : `Listing tersimpan dan tayang di katalog (${json.listingId}).` })
       onSaved()
     } catch (err) {
       setMsg({ ok: false, text: err.message })
@@ -69,7 +77,7 @@ export default function AddListingForm({ onSaved }) {
 
   return (
     <form className={s.form} onSubmit={submit}>
-      <h3 className={s.title}>Tambah listing kos</h3>
+      <h3 className={s.title}>{editing ? 'Ubah data listing kos' : 'Tambah listing kos'}</h3>
 
       <div className={s.grid}>
         <div className={s.field}>
@@ -135,8 +143,9 @@ export default function AddListingForm({ onSaved }) {
 
       <div className={s.actions}>
         <Button as="button" type="submit" size="sm" disabled={busy}>
-          {busy ? 'Menyimpan…' : 'Simpan listing'}
+          {busy ? 'Menyimpan…' : editing ? 'Simpan perubahan' : 'Simpan listing'}
         </Button>
+        {editing && <Button as="button" type="button" variant="secondary" size="sm" onClick={onCancel}>Batal</Button>}
         {msg && (
           <p className={msg.ok ? s.ok : s.bad} role={msg.ok ? 'status' : 'alert'}>
             {msg.text}

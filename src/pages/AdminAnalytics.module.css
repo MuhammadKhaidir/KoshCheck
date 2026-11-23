@@ -1,0 +1,167 @@
+.section {
+  margin-bottom: var(--space-7);
+}
+
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+
+.eyebrow {
+  margin-bottom: 0.2rem;
+  color: var(--muted);
+  font-size: var(--step--1);
+  font-weight: 750;
+  letter-spacing: 0.08em;
+}
+
+.head h2 {
+  font-size: var(--step-2);
+}
+
+.description {
+  margin-top: 0.2rem;
+  color: var(--muted);
+  font-size: var(--step--1);
+}
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.mode {
+  display: flex;
+  gap: 0.2rem;
+  padding: 0.2rem;
+  border-radius: var(--radius-m);
+  background: var(--paper-sunk);
+}
+
+.mode button {
+  padding: 0.5rem 0.75rem;
+  border: 0;
+  border-radius: calc(var(--radius-m) - 3px);
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--step--1);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.mode button[aria-pressed='true'] {
+  background: var(--ink);
+  color: var(--white);
+}
+
+.yearSelect {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: var(--step--1);
+  font-weight: 700;
+}
+
+.yearSelect select {
+  min-width: 5.5rem;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  background: var(--white);
+  color: var(--text);
+  font: inherit;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+.card {
+  min-width: 0;
+  padding: var(--space-4);
+  background: var(--white);
+  border: 2px solid var(--ink);
+  border-radius: var(--radius-m);
+}
+
+.cardHead {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+
+.cardHead h3 {
+  font-size: var(--step-1);
+}
+
+.cardHead p {
+  margin-top: 0.15rem;
+  color: var(--muted);
+  font-size: var(--step--1);
+}
+
+.chartWrap {
+  width: 100%;
+  overflow: hidden;
+}
+
+.chart {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.gridLine {
+  stroke: var(--line);
+  stroke-width: 1;
+  stroke-dasharray: 3 5;
+}
+
+.axisText {
+  fill: var(--muted);
+  font-family: var(--font-body);
+  font-size: 11px;
+}
+
+.barValue {
+  fill: var(--text);
+  font-family: var(--font-body);
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.orderBar {
+  fill: var(--ink);
+}
+
+.listingBar {
+  fill: var(--marker-deep);
+}
+
+@media (max-width: 760px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 480px) {
+  .card {
+    padding: var(--space-3);
+  }
+
+  .axisText,
+  .barValue {
+    font-size: 10px;
+  }
+}
