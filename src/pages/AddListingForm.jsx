@@ -102,7 +102,7 @@ export default function AddListingForm({ onSaved, listing = null, onCancel }) {
           </select>
         </div>
         <div className={s.field}>
-          <label htmlFor="al-harga">Harga per bulan (Rp)</label>
+          <label htmlFor="al-harga">Harga per tahun (Rp)</label>
           <input id="al-harga" required type="number" inputMode="numeric" min={50000} step={50000} value={form.harga} onChange={set('harga')} />
         </div>
         <fieldset className={`${s.field} ${s.wide} ${s.checks}`}>
