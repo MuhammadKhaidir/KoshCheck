@@ -8,7 +8,7 @@ function TrendChart({ title, items, variant }) {
   const total = items.reduce((sum, item) => sum + item.value, 0)
   const max = Math.max(1, ...items.map((item) => item.value))
   const left = 38
-  const top = 18
+  const top = 30
   const plotWidth = 664
   const plotHeight = 166
   const baseline = top + plotHeight
@@ -25,11 +25,10 @@ function TrendChart({ title, items, variant }) {
       </div>
       <div className={s.chartWrap}>
         <svg className={s.chart} viewBox="0 0 720 232" role="img" aria-label={`Grafik ${title}`}>
-          {[0, 0.5, 1].map((ratio) => {
-            const y = top + plotHeight * (1 - ratio)
-            const value = Math.round(max * ratio)
+          {[...new Set([0, Math.round(max / 2), max])].map((value) => {
+            const y = top + plotHeight * (1 - value / max)
             return (
-              <g key={ratio}>
+              <g key={value}>
                 <line className={s.gridLine} x1={left} x2={left + plotWidth} y1={y} y2={y} />
                 <text className={s.axisText} x={left - 9} y={y + 4} textAnchor="end">{value}</text>
               </g>
@@ -42,7 +41,7 @@ function TrendChart({ title, items, variant }) {
             return (
               <g key={item.label}>
                 <rect className={variant === 'orders' ? s.orderBar : s.listingBar} x={x} y={y} width={barWidth} height={height} rx="4" />
-                {item.value > 0 && <text className={s.barValue} x={x + barWidth / 2} y={Math.max(top + 11, y - 7)} textAnchor="middle">{item.value}</text>}
+                {item.value > 0 && <text className={s.barValue} x={x + barWidth / 2} y={y - 7} textAnchor="middle">{item.value}</text>}
                 <text className={s.axisText} x={x + barWidth / 2} y={baseline + 22} textAnchor="middle">{item.label}</text>
               </g>
             )

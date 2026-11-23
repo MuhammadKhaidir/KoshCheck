@@ -1,0 +1,747 @@
+diff --git a/api/_db.js b/api/_db.js
+index 44c984d..d0b6d63 100644
+--- a/api/_db.js
++++ b/api/_db.js
+@@ -192,6 +192,43 @@ export async function insertListing(env, l) {
+   return row
+ }
+ 
++/** Ubah data listing tanpa mengubah status publik, pemilik, atau tanggal pendaftaran. */
++export async function updateListing(env, id, l) {
++  if (!usePostgres(env)) {
++    assertFileAllowed(env)
++    return updateJson((db) => {
++      const row = db.listings.find((item) => item.id === id)
++      if (!row) return null
++      Object.assign(row, l)
++      return row
++    })
++  }
++  const sql = await getSql(env)
++  const [row] = await sql`
++    update listings set
++      nama = ${l.nama}, whatsapp = ${l.whatsapp}, kos = ${l.kos},
++      area = ${l.area}, catatan = ${l.catatan}, foto = ${l.foto},
++      harga = ${l.harga}, tipe = ${l.tipe}, fasilitas = ${l.fasilitas}
++    where id = ${id}
++    returning *`
++  return row ?? null
++}
++
++/** Hapus listing. Riwayat orders sengaja tidak disentuh. */
++export async function deleteListing(env, id) {
++  if (!usePostgres(env)) {
++    assertFileAllowed(env)
++    return updateJson((db) => {
++      const index = db.listings.findIndex((item) => item.id === id)
++      if (index < 0) return null
++      return db.listings.splice(index, 1)[0]
++    })
++  }
++  const sql = await getSql(env)
++  const [row] = await sql`delete from listings where id = ${id} returning id`
++  return row ?? null
++}
++
+ /** Listing yang ditandai publik (ditambah admin), untuk katalog di halaman utama. Terbaru di atas, maks 100. */
+ export async function listPublicListings(env) {
+   if (!usePostgres(env)) {
+@@ -210,14 +247,45 @@ export async function listAll(env) {
+     assertFileAllowed(env)
+     const db = await readJson()
+     const newest = (rows) => [...rows].reverse().slice(0, 500)
+-    return { orders: newest(db.orders), listings: newest(db.listings) }
++    const summarize = (rows) => {
++      const grouped = new Map()
++      for (const row of rows) {
++        const date = new Date(row.created_at)
++        if (Number.isNaN(date.getTime())) continue
++        const parts = new Intl.DateTimeFormat('en-US', {
++          timeZone: 'Asia/Jakarta', year: 'numeric', month: 'numeric',
++        }).formatToParts(date)
++        const year = Number(parts.find((part) => part.type === 'year')?.value)
++        const month = Number(parts.find((part) => part.type === 'month')?.value)
++        const key = `${year}-${month}`
++        const item = grouped.get(key) ?? { year, month, total: 0 }
++        item.total += 1
++        grouped.set(key, item)
++      }
++      return [...grouped.values()].sort((a, b) => a.year - b.year || a.month - b.month)
++    }
++    return {
++      orders: newest(db.orders),
++      listings: newest(db.listings),
++      analytics: { orders: summarize(db.orders), listings: summarize(db.listings) },
++    }
+   }
+   const sql = await getSql(env)
+-  const [orders, listings] = await Promise.all([
++  const [orders, listings, orderTrend, listingTrend] = await Promise.all([
+     sql`select * from orders order by created_at desc limit 500`,
+     sql`select * from listings order by created_at desc limit 500`,
++    sql`select
++          extract(year from created_at at time zone 'Asia/Jakarta')::int as year,
++          extract(month from created_at at time zone 'Asia/Jakarta')::int as month,
++          count(*)::int as total
++        from orders group by 1, 2 order by 1, 2`,
++    sql`select
++          extract(year from created_at at time zone 'Asia/Jakarta')::int as year,
++          extract(month from created_at at time zone 'Asia/Jakarta')::int as month,
++          count(*)::int as total
++        from listings group by 1, 2 order by 1, 2`,
+   ])
+-  return { orders, listings }
++  return { orders, listings, analytics: { orders: orderTrend, listings: listingTrend } }
+ }
+ 
+ /* ---------- Pemilik kos ---------- */
+diff --git a/api/admin-listings.js b/api/admin-listings.js
+index 2f0f172..dbffa6e 100644
+--- a/api/admin-listings.js
++++ b/api/admin-listings.js
+@@ -11,7 +11,7 @@
+   dan di Vercel (yang tidak punya disk permanen) tanpa layanan penyimpanan tambahan.
+ */
+ import { isAdmin } from './_auth.js'
+-import { insertListing, newId } from './_db.js'
++import { insertListing, newId, updateListing as saveListing, deleteListing as removeListingById } from './_db.js'
+ import { parseListing } from './listings.js'
+ import { FASILITAS, TIPE } from '../src/data/kos.js'
+ 
+@@ -51,8 +51,59 @@ export async function addListing(body, env, req) {
+   return { status: 201, data: { listingId: id } }
+ }
+ 
++export async function editListing(body, env, req) {
++  if (!env.ADMIN_KEY) return { status: 503, data: { error: 'ADMIN_KEY belum diisi.' } }
++  if (!isAdmin(req, env)) return { status: 401, data: { error: 'Belum masuk atau sesi sudah habis.' } }
++  const id = typeof body?.id === 'string' ? body.id.trim() : ''
++  if (!id) return { status: 400, data: { error: 'ID listing tidak valid.' } }
++
++  const { error, value } = parseListing(body)
++  if (error) return { status: 400, data: { error } }
++  const tipe = TIPE.find((item) => item === body?.tipe)
++  const harga = Number(body?.harga)
++  if (!tipe) return { status: 400, data: { error: 'Tipe kos belum dipilih.' } }
++  if (!Number.isInteger(harga) || harga < 50_000 || harga > 50_000_000) {
++    return { status: 400, data: { error: 'Harga per bulan belum benar.' } }
++  }
++
++  let foto = null
++  if (body?.foto) {
++    if (typeof body.foto !== 'string' || body.foto.length > FOTO_MAX_CHARS || !FOTO_RE.test(body.foto)) {
++      return { status: 400, data: { error: 'Foto tidak valid atau terlalu besar.' } }
++    }
++    foto = body.foto
++  }
++  const fasilitas = FASILITAS.filter((item) => Array.isArray(body?.fasilitas) && body.fasilitas.includes(item)).join(',')
++
++  try {
++    const row = await saveListing(env, id, { ...value, foto, tipe, harga, fasilitas })
++    if (!row) return { status: 404, data: { error: 'Listing tidak ditemukan.' } }
++  } catch (err) {
++    console.error('[admin-listings:update]', err)
++    return { status: 500, data: { error: 'Perubahan listing belum bisa disimpan.' } }
++  }
++  return { status: 200, data: { listingId: id } }
++}
++
++export async function deleteListing(body, env, req) {
++  if (!env.ADMIN_KEY) return { status: 503, data: { error: 'ADMIN_KEY belum diisi.' } }
++  if (!isAdmin(req, env)) return { status: 401, data: { error: 'Belum masuk atau sesi sudah habis.' } }
++  const id = typeof body?.id === 'string' ? body.id.trim() : ''
++  if (!id) return { status: 400, data: { error: 'ID listing tidak valid.' } }
++  try {
++    const row = await removeListingById(env, id)
++    if (!row) return { status: 404, data: { error: 'Listing tidak ditemukan.' } }
++  } catch (err) {
++    console.error('[admin-listings:delete]', err)
++    return { status: 500, data: { error: 'Listing belum bisa dihapus.' } }
++  }
++  return { status: 200, data: { deleted: true, listingId: id } }
++}
++
+ export default async function handler(req, res) {
+-  if (req.method !== 'POST') return res.status(405).json({ error: 'Gunakan POST.' })
+-  const { status, data } = await addListing(req.body, process.env, req)
++  const actions = { POST: addListing, PATCH: editListing, DELETE: deleteListing }
++  const action = actions[req.method]
++  if (!action) return res.status(405).json({ error: 'Gunakan POST, PATCH, atau DELETE.' })
++  const { status, data } = await action(req.body, process.env, req)
+   res.status(status).json(data)
+ }
+diff --git a/src/pages/AddListingForm.jsx b/src/pages/AddListingForm.jsx
+index 8283147..23f51c2 100644
+--- a/src/pages/AddListingForm.jsx
++++ b/src/pages/AddListingForm.jsx
+@@ -8,10 +8,15 @@ import s from './AddListingForm.module.css'
+ const EMPTY = { nama: '', whatsapp: '', kos: '', area: '', catatan: '', tipe: '', harga: '' }
+ 
+ /** Form tambah listing kos (+ foto) di halaman database. onSaved() dipanggil setelah berhasil disimpan. */
+-export default function AddListingForm({ onSaved }) {
+-  const [form, setForm] = useState(EMPTY)
+-  const [fasilitas, setFasilitas] = useState([])
+-  const [foto, setFoto] = useState('')
++export default function AddListingForm({ onSaved, listing = null, onCancel }) {
++  const editing = Boolean(listing)
++  const [form, setForm] = useState(() => listing ? {
++    nama: listing.nama ?? '', whatsapp: listing.whatsapp ?? '', kos: listing.kos ?? '',
++    area: listing.area ?? '', catatan: listing.catatan ?? '', tipe: listing.tipe ?? '',
++    harga: listing.harga == null ? '' : String(listing.harga),
++  } : EMPTY)
++  const [fasilitas, setFasilitas] = useState(() => String(listing?.fasilitas ?? '').split(',').map((item) => item.trim()).filter(Boolean))
++  const [foto, setFoto] = useState(listing?.foto ?? '')
+   const [busy, setBusy] = useState(false)
+   const [msg, setMsg] = useState(null) // { ok: boolean, text: string }
+   const fileRef = useRef(null)
+@@ -43,10 +48,11 @@ export default function AddListingForm({ onSaved }) {
+     setBusy(true)
+     setMsg(null)
+     try {
++      const method = editing ? 'PATCH' : 'POST'
+       const res = await fetch('/api/admin-listings', {
+-        method: 'POST',
++        method,
+         headers: { 'content-type': 'application/json', authorization: `Bearer ${getToken()}` },
+-        body: JSON.stringify({ ...form, harga: Number(form.harga), fasilitas, foto }),
++        body: JSON.stringify({ ...form, id: listing?.id, harga: Number(form.harga), fasilitas, foto }),
+       })
+       const json = await res.json().catch(() => ({}))
+       if (res.status === 401) {
+@@ -55,10 +61,12 @@ export default function AddListingForm({ onSaved }) {
+         return
+       }
+       if (!res.ok) throw new Error(json.error || `HTTP ${res.status}`)
+-      setForm(EMPTY)
+-      setFasilitas([])
+-      removeFoto()
+-      setMsg({ ok: true, text: `Listing tersimpan dan tayang di katalog (${json.listingId}).` })
++      if (!editing) {
++        setForm(EMPTY)
++        setFasilitas([])
++        removeFoto()
++      }
++      setMsg({ ok: true, text: editing ? 'Perubahan listing berhasil disimpan.' : `Listing tersimpan dan tayang di katalog (${json.listingId}).` })
+       onSaved()
+     } catch (err) {
+       setMsg({ ok: false, text: err.message })
+@@ -69,7 +77,7 @@ export default function AddListingForm({ onSaved }) {
+ 
+   return (
+     <form className={s.form} onSubmit={submit}>
+-      <h3 className={s.title}>Tambah listing kos</h3>
++      <h3 className={s.title}>{editing ? 'Ubah data listing kos' : 'Tambah listing kos'}</h3>
+ 
+       <div className={s.grid}>
+         <div className={s.field}>
+@@ -135,8 +143,9 @@ export default function AddListingForm({ onSaved }) {
+ 
+       <div className={s.actions}>
+         <Button as="button" type="submit" size="sm" disabled={busy}>
+-          {busy ? 'Menyimpan…' : 'Simpan listing'}
++          {busy ? 'Menyimpan…' : editing ? 'Simpan perubahan' : 'Simpan listing'}
+         </Button>
++        {editing && <Button as="button" type="button" variant="secondary" size="sm" onClick={onCancel}>Batal</Button>}
+         {msg && (
+           <p className={msg.ok ? s.ok : s.bad} role={msg.ok ? 'status' : 'alert'}>
+             {msg.text}
+diff --git a/src/pages/AdminAnalytics.jsx b/src/pages/AdminAnalytics.jsx
+new file mode 100644
+index 0000000..99eb054
+--- /dev/null
++++ b/src/pages/AdminAnalytics.jsx
+@@ -0,0 +1,114 @@
++import { useMemo, useState } from 'react'
++import s from './AdminAnalytics.module.css'
++
++const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des']
++const CURRENT_YEAR = new Date().getFullYear()
++
++function TrendChart({ title, items, variant }) {
++  const total = items.reduce((sum, item) => sum + item.value, 0)
++  const max = Math.max(1, ...items.map((item) => item.value))
++  const left = 38
++  const top = 30
++  const plotWidth = 664
++  const plotHeight = 166
++  const baseline = top + plotHeight
++  const step = plotWidth / Math.max(items.length, 1)
++  const barWidth = Math.min(34, Math.max(8, step * 0.58))
++
++  return (
++    <article className={s.card}>
++      <div className={s.cardHead}>
++        <div>
++          <h3>{title}</h3>
++          <p>Jumlah data: <strong>{total.toLocaleString('id-ID')}</strong></p>
++        </div>
++      </div>
++      <div className={s.chartWrap}>
++        <svg className={s.chart} viewBox="0 0 720 232" role="img" aria-label={`Grafik ${title}`}>
++          {[...new Set([0, Math.round(max / 2), max])].map((value) => {
++            const y = top + plotHeight * (1 - value / max)
++            return (
++              <g key={value}>
++                <line className={s.gridLine} x1={left} x2={left + plotWidth} y1={y} y2={y} />
++                <text className={s.axisText} x={left - 9} y={y + 4} textAnchor="end">{value}</text>
++              </g>
++            )
++          })}
++          {items.map((item, index) => {
++            const height = (item.value / max) * plotHeight
++            const x = left + index * step + (step - barWidth) / 2
++            const y = baseline - height
++            return (
++              <g key={item.label}>
++                <rect className={variant === 'orders' ? s.orderBar : s.listingBar} x={x} y={y} width={barWidth} height={height} rx="4" />
++                {item.value > 0 && <text className={s.barValue} x={x + barWidth / 2} y={y - 7} textAnchor="middle">{item.value}</text>}
++                <text className={s.axisText} x={x + barWidth / 2} y={baseline + 22} textAnchor="middle">{item.label}</text>
++              </g>
++            )
++          })}
++        </svg>
++      </div>
++    </article>
++  )
++}
++
++export default function AdminAnalytics({ analytics }) {
++  const [mode, setMode] = useState('monthly')
++  const [year, setYear] = useState(CURRENT_YEAR)
++  const orders = analytics?.orders ?? []
++  const listings = analytics?.listings ?? []
++
++  const years = useMemo(() => {
++    const found = new Set([...orders, ...listings].map((item) => Number(item.year)).filter(Number.isFinite))
++    found.add(CURRENT_YEAR)
++    return [...found].sort((a, b) => b - a)
++  }, [orders, listings])
++
++  const makeItems = (rows) => {
++    if (mode === 'monthly') {
++      return MONTHS.map((label, index) => ({
++        label,
++        value: rows.filter((item) => Number(item.year) === Number(year) && Number(item.month) === index + 1)
++          .reduce((sum, item) => sum + Number(item.total || 0), 0),
++      }))
++    }
++    return [...years].sort((a, b) => a - b).map((targetYear) => ({
++      label: String(targetYear),
++      value: rows.filter((item) => Number(item.year) === targetYear)
++        .reduce((sum, item) => sum + Number(item.total || 0), 0),
++    }))
++  }
++
++  const orderItems = useMemo(() => makeItems(orders), [orders, mode, year, years])
++  const listingItems = useMemo(() => makeItems(listings), [listings, mode, year, years])
++
++  return (
++    <section className={s.section} aria-labelledby="admin-analytics">
++      <div className={s.head}>
++        <div>
++          <p className={s.eyebrow}>STATISTIK</p>
++          <h2 id="admin-analytics">Aktivitas KOSCHECK</h2>
++          <p className={s.description}>Tren pemesanan survei dan pendaftaran kos berdasarkan waktu data masuk.</p>
++        </div>
++        <div className={s.controls}>
++          <div className={s.mode} role="group" aria-label="Periode grafik">
++            <button type="button" aria-pressed={mode === 'monthly'} onClick={() => setMode('monthly')}>Per bulan</button>
++            <button type="button" aria-pressed={mode === 'yearly'} onClick={() => setMode('yearly')}>Per tahun</button>
++          </div>
++          {mode === 'monthly' && (
++            <label className={s.yearSelect}>
++              <span>Tahun</span>
++              <select value={year} onChange={(event) => setYear(Number(event.target.value))}>
++                {years.map((item) => <option key={item} value={item}>{item}</option>)}
++              </select>
++            </label>
++          )}
++        </div>
++      </div>
++      <div className={s.grid}>
++        <TrendChart title="Pemesanan survei" items={orderItems} variant="orders" />
++        <TrendChart title="Listing kos" items={listingItems} variant="listings" />
++      </div>
++    </section>
++  )
++}
+diff --git a/src/pages/AdminAnalytics.module.css b/src/pages/AdminAnalytics.module.css
+new file mode 100644
+index 0000000..43735ee
+--- /dev/null
++++ b/src/pages/AdminAnalytics.module.css
+@@ -0,0 +1,167 @@
++.section {
++  margin-bottom: var(--space-7);
++}
++
++.head {
++  display: flex;
++  flex-wrap: wrap;
++  align-items: flex-end;
++  justify-content: space-between;
++  gap: var(--space-3);
++  margin-bottom: var(--space-3);
++}
++
++.eyebrow {
++  margin-bottom: 0.2rem;
++  color: var(--muted);
++  font-size: var(--step--1);
++  font-weight: 750;
++  letter-spacing: 0.08em;
++}
++
++.head h2 {
++  font-size: var(--step-2);
++}
++
++.description {
++  margin-top: 0.2rem;
++  color: var(--muted);
++  font-size: var(--step--1);
++}
++
++.controls {
++  display: flex;
++  flex-wrap: wrap;
++  align-items: center;
++  gap: var(--space-2);
++}
++
++.mode {
++  display: flex;
++  gap: 0.2rem;
++  padding: 0.2rem;
++  border-radius: var(--radius-m);
++  background: var(--paper-sunk);
++}
++
++.mode button {
++  padding: 0.5rem 0.75rem;
++  border: 0;
++  border-radius: calc(var(--radius-m) - 3px);
++  background: transparent;
++  color: var(--ink);
++  font: inherit;
++  font-size: var(--step--1);
++  font-weight: 700;
++  cursor: pointer;
++}
++
++.mode button[aria-pressed='true'] {
++  background: var(--ink);
++  color: var(--white);
++}
++
++.yearSelect {
++  display: flex;
++  align-items: center;
++  gap: 0.45rem;
++  font-size: var(--step--1);
++  font-weight: 700;
++}
++
++.yearSelect select {
++  min-width: 5.5rem;
++  padding: 0.5rem 0.65rem;
++  border: 1px solid var(--line);
++  border-radius: var(--radius-s);
++  background: var(--white);
++  color: var(--text);
++  font: inherit;
++}
++
++.grid {
++  display: grid;
++  grid-template-columns: repeat(2, minmax(0, 1fr));
++  gap: var(--space-3);
++}
++
++.card {
++  min-width: 0;
++  padding: var(--space-4);
++  background: var(--white);
++  border: 2px solid var(--ink);
++  border-radius: var(--radius-m);
++}
++
++.cardHead {
++  display: flex;
++  justify-content: space-between;
++  gap: var(--space-2);
++  margin-bottom: var(--space-2);
++}
++
++.cardHead h3 {
++  font-size: var(--step-1);
++}
++
++.cardHead p {
++  margin-top: 0.15rem;
++  color: var(--muted);
++  font-size: var(--step--1);
++}
++
++.chartWrap {
++  width: 100%;
++  overflow: hidden;
++}
++
++.chart {
++  display: block;
++  width: 100%;
++  height: auto;
++  overflow: visible;
++}
++
++.gridLine {
++  stroke: var(--line);
++  stroke-width: 1;
++  stroke-dasharray: 3 5;
++}
++
++.axisText {
++  fill: var(--muted);
++  font-family: var(--font-body);
++  font-size: 11px;
++}
++
++.barValue {
++  fill: var(--text);
++  font-family: var(--font-body);
++  font-size: 11px;
++  font-weight: 750;
++}
++
++.orderBar {
++  fill: var(--ink);
++}
++
++.listingBar {
++  fill: var(--marker-deep);
++}
++
++@media (max-width: 760px) {
++  .grid {
++    grid-template-columns: 1fr;
++  }
++}
++
++@media (max-width: 480px) {
++  .card {
++    padding: var(--space-3);
++  }
++
++  .axisText,
++  .barValue {
++    font-size: 10px;
++  }
++}
+diff --git a/src/pages/AdminPage.jsx b/src/pages/AdminPage.jsx
+index 83c6550..aed584c 100644
+--- a/src/pages/AdminPage.jsx
++++ b/src/pages/AdminPage.jsx
+@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
+ import Container from '../components/ui/Container.jsx'
+ import Button from '../components/ui/Button.jsx'
+ import AddListingForm from './AddListingForm.jsx'
++import AdminAnalytics from './AdminAnalytics.jsx'
+ import { plans } from '../content/site.js'
+ import { rupiah } from '../lib/format.js'
+ import { clearToken, getToken } from '../lib/adminSession.js'
+@@ -50,6 +51,9 @@ export default function AdminPage() {
+   const [error, setError] = useState('')
+   const [updatedAt, setUpdatedAt] = useState(null)
+   const [filter, setFilter] = useState('all')
++  const [editingListing, setEditingListing] = useState(null)
++  const [listingError, setListingError] = useState('')
++  const [listingBusy, setListingBusy] = useState('')
+ 
+   const load = useCallback(async () => {
+     const token = getToken()
+@@ -62,7 +66,11 @@ export default function AdminPage() {
+       }
+       const json = await res.json().catch(() => ({}))
+       if (!res.ok) throw new Error(json.error || `HTTP ${res.status}`)
+-      setData({ orders: json.orders ?? [], listings: json.listings ?? [] })
++      setData({
++        orders: json.orders ?? [],
++        listings: json.listings ?? [],
++        analytics: json.analytics ?? { orders: [], listings: [] },
++      })
+       setUpdatedAt(new Date())
+       setError('')
+       setState('ready')
+@@ -93,6 +101,32 @@ export default function AdminPage() {
+ 
+   const shown = filter === 'all' ? orders : orders.filter((o) => o.status === filter)
+ 
++  async function removeListing(listing) {
++    if (!window.confirm(`Hapus listing "${listing.kos}"? Data ini akan hilang dari katalog dan halaman admin. Riwayat pesanan tidak ikut dihapus.`)) return
++    setListingBusy(listing.id)
++    setListingError('')
++    try {
++      const res = await fetch('/api/admin-listings', {
++        method: 'DELETE',
++        headers: { 'content-type': 'application/json', authorization: `Bearer ${getToken()}` },
++        body: JSON.stringify({ id: listing.id }),
++      })
++      const json = await res.json().catch(() => ({}))
++      if (res.status === 401) {
++        clearToken()
++        setState('nologin')
++        return
++      }
++      if (!res.ok) throw new Error(json.error || `HTTP ${res.status}`)
++      if (editingListing?.id === listing.id) setEditingListing(null)
++      await load()
++    } catch (err) {
++      setListingError(err.message)
++    } finally {
++      setListingBusy('')
++    }
++  }
++
+   function logout() {
+     clearToken()
+     window.location.hash = '#top'
+@@ -185,6 +219,8 @@ export default function AdminPage() {
+               </div>
+             </dl>
+ 
++            <AdminAnalytics analytics={data.analytics} />
++
+             <section className={s.block} aria-labelledby="admin-orders">
+               <div className={s.blockHead}>
+                 <h2 id="admin-orders" className={s.h2}>
+@@ -262,7 +298,12 @@ export default function AdminPage() {
+                 </h2>
+               </div>
+ 
+-              <AddListingForm onSaved={load} />
++              {editingListing ? (
++                <AddListingForm key={editingListing.id} listing={editingListing} onCancel={() => setEditingListing(null)} onSaved={() => { setEditingListing(null); load() }} />
++              ) : (
++                <AddListingForm onSaved={load} />
++              )}
++              {listingError && <p className={s.error} role="alert">{listingError}</p>}
+ 
+               {listings.length === 0 ? (
+                 <p className={s.empty}>Belum ada pendaftaran.</p>
+@@ -279,6 +320,7 @@ export default function AdminPage() {
+                         <th scope="col">Area</th>
+                         <th scope="col">Catatan</th>
+                         <th scope="col">No. pendaftaran</th>
++                        <th scope="col">Aksi</th>
+                       </tr>
+                     </thead>
+                     <tbody>
+@@ -308,6 +350,16 @@ export default function AdminPage() {
+                           <td className={s.wrap}>{l.area}</td>
+                           <td className={s.wrap}>{l.catatan || '-'}</td>
+                           <td className={s.nowrap}>{l.id}</td>
++                          <td className={s.nowrap}>
++                            <div className={s.rowActions}>
++                              <button type="button" className={s.actionButton} onClick={() => { setListingError(''); setEditingListing(l) }}>
++                                Edit
++                              </button>
++                              <button type="button" className={`${s.actionButton} ${s.deleteButton}`} disabled={listingBusy === l.id} onClick={() => removeListing(l)}>
++                                {listingBusy === l.id ? 'Menghapus…' : 'Hapus'}
++                              </button>
++                            </div>
++                          </td>
+                         </tr>
+                       ))}
+                     </tbody>
+diff --git a/src/pages/AdminPage.module.css b/src/pages/AdminPage.module.css
+index 7982224..6bef346 100644
+--- a/src/pages/AdminPage.module.css
++++ b/src/pages/AdminPage.module.css
+@@ -218,3 +218,33 @@
+   object-fit: cover;
+   border-radius: var(--radius-s);
+ }
++
++.rowActions {
++  display: flex;
++  align-items: center;
++  gap: 0.4rem;
++}
++
++.actionButton {
++  padding: 0.35rem 0.6rem;
++  border: 1px solid var(--line);
++  border-radius: var(--radius-s);
++  background: var(--white);
++  color: var(--ink);
++  font: inherit;
++  font-weight: 700;
++  cursor: pointer;
++}
++
++.actionButton:hover:not(:disabled) {
++  background: var(--paper-sunk);
++}
++
++.actionButton:disabled {
++  cursor: wait;
++  opacity: 0.6;
++}
++
++.deleteButton {
++  color: var(--bad);
++}
+diff --git a/vite.config.js b/vite.config.js
+index 72872b6..a4488af 100644
+--- a/vite.config.js
++++ b/vite.config.js
+@@ -7,6 +7,7 @@ import react from '@vitejs/plugin-react'
+ // Di production (Vercel), file api/*.js dipakai langsung.
+ // (api/pay-notify.js tidak ada di sini: Midtrans tidak bisa memanggil localhost. Uji setelah deploy.)
+ // Fungsi dipanggil sebagai fn(body, env, req). `method` bawaan POST.
++// Route dengan beberapa method memakai `fns: { METHOD: namaFungsi }` (contoh: /api/admin-listings).
+ const DEV_API = {
+   '/api/chat': { file: 'api/chat.js', fn: 'chat' },
+   '/api/pay': { file: 'api/pay.js', fn: 'createPayment' },
+@@ -16,7 +17,10 @@ const DEV_API = {
+   '/api/admin': { file: 'api/admin.js', fn: 'listData', method: 'GET' },
+   '/api/kos': { file: 'api/kos.js', fn: 'listKos', method: 'GET' },
+   '/api/admin-login': { file: 'api/admin-login.js', fn: 'adminLogin' },
+-  '/api/admin-listings': { file: 'api/admin-listings.js', fn: 'addListing' },
++  '/api/admin-listings': {
++    file: 'api/admin-listings.js',
++    fns: { POST: 'addListing', PATCH: 'editListing', DELETE: 'deleteListing' },
++  },
+   '/api/owner': { file: 'api/owner.js', fn: 'ownerApi' },
+ }
+ 
+@@ -25,13 +29,15 @@ function devApi(env) {
+     name: 'dev-api',
+     apply: 'serve',
+     configureServer(server) {
+-      for (const [route, { file, fn, method = 'POST' }] of Object.entries(DEV_API)) {
++      for (const [route, { file, fn, fns, method = 'POST' }] of Object.entries(DEV_API)) {
++        const handlers = fns ?? { [method]: fn }
+         server.middlewares.use(route, async (req, res) => {
+           let status = 405
+-          let data = { error: `Gunakan ${method}.` }
+-          if (req.method === method) {
++          let data = { error: `Gunakan ${Object.keys(handlers).join(', ')}.` }
++          const name = handlers[req.method]
++          if (name) {
+             let body = {}
+-            if (method === 'POST') {
++            if (req.method !== 'GET') {
+               let raw = ''
+               for await (const part of req) raw += part
+               try {
+@@ -41,7 +47,7 @@ function devApi(env) {
+               }
+             }
+             const url = pathToFileURL(path.resolve(file)).href + `?t=${Date.now()}`
+-            ;({ status, data } = await (await import(url))[fn](body, env, req))
++            ;({ status, data } = await (await import(url))[name](body, env, req))
+           }
+           res.statusCode = status
+           res.setHeader('content-type', 'application/json')
