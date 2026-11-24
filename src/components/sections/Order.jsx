@@ -2,7 +2,7 @@ import { useEffect, useId, useState } from 'react'
 import Section from '../ui/Section.jsx'
 import SectionHead from '../ui/SectionHead.jsx'
 import Button from '../ui/Button.jsx'
-import DummyPay from '../pay/DummyPay.jsx'
+import QrisPay from '../pay/QrisPay.jsx'
 import { useOrderIntent } from '../../context/OrderIntent.jsx'
 import { order, surveyPlans, contact, brand } from '../../content/site.js'
 import { pricePlan } from '../../lib/openingPromo.js'
@@ -90,15 +90,12 @@ export default function Order() {
 
   const plan = pricePlan(surveyPlans.find((p) => p.id === forms.survei.paket) ?? surveyPlans[0], now)
 
-  /** Pesan survei: simpan pesanan ke backend (/api/orders), lalu buka tampilan pembayaran dummy. */
+  /** Pesan survei: simpan pesanan pending, kemudian tampilkan QRIS asli. */
   async function startOrder() {
+    if (sending) return
     setStatus('')
     setError('')
     setDone(null)
-    if (!import.meta.env.DEV || import.meta.env.VITE_ENABLE_DUMMY_PAYMENT !== 'true') {
-      setError('Pembayaran online belum aktif. Silakan hubungi tim KOSCHECK melalui WhatsApp.')
-      return
-    }
     setSending(true)
     try {
       const data = await postJson('/api/orders', form)
@@ -256,7 +253,7 @@ export default function Order() {
                 <>
                   <p className={s.previewLabel}>Yang kamu bayar</p>
                   <p className={s.previewText}>
-                    {plan.name}, {rupiah(plan.price)}. {import.meta.env.DEV && import.meta.env.VITE_ENABLE_DUMMY_PAYMENT === 'true' ? 'Simulasi lokal tanpa uang sungguhan.' : 'Hubungi tim KOSCHECK melalui WhatsApp untuk pemesanan.'}
+                    {plan.name}, {rupiah(plan.price)}. Bayar melalui QRIS GoPay Merchant; pembayaran diperiksa oleh tim KOSCHECK.
                   </p>
                 </>
               ) : (
@@ -272,8 +269,8 @@ export default function Order() {
 
             {mode === 'survei' ? (
               <div className={s.actions}>
-                <Button as="button" type="submit" disabled={sending || !import.meta.env.DEV || import.meta.env.VITE_ENABLE_DUMMY_PAYMENT !== 'true'}>
-                  {sending ? 'Menyiapkan pembayaran' : import.meta.env.DEV && import.meta.env.VITE_ENABLE_DUMMY_PAYMENT === 'true' ? `Simulasi bayar ${rupiah(plan.price)}` : 'Pembayaran online belum aktif'}
+                <Button as="button" type="submit" disabled={sending}>
+                  {sending ? 'Menyiapkan pembayaran' : `Bayar ${rupiah(plan.price)}`}
                 </Button>
                 {waUrl && (
                   <Button as="a" variant="secondary" href={waUrl} target="_blank" rel="noopener noreferrer">
@@ -334,9 +331,9 @@ export default function Order() {
           </form>
 
           {dummy && (
-            <DummyPay
+            <QrisPay
               order={dummy}
-              onFinish={(hasil) => afterPay(dummy, hasil === 'paid' ? 'paid' : 'failed')}
+              whatsapp={contact.whatsapp}
               onClose={() => afterPay(dummy, 'unpaid')}
             />
           )}
