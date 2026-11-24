@@ -13,6 +13,7 @@
 */
 import { randomBytes } from 'node:crypto'
 import { plans } from '../src/content/site.js'
+import { pricePlan } from '../src/lib/openingPromo.js'
 
 const SNAP_API = {
   sandbox: 'https://app.sandbox.midtrans.com/snap/v1/transactions',
@@ -34,7 +35,7 @@ export async function createPayment(body, env) {
   }
   const mode = env.MIDTRANS_IS_PRODUCTION === 'true' ? 'production' : 'sandbox'
 
-  const plan = plans.items.find((p) => p.id === body?.paket)
+  const plan = pricePlan(plans.items.find((p) => p.id === body?.paket))
   const nama = clip(body?.nama, 60)
   const kos = clip(body?.kos, 200)
   const catatan = clip(body?.catatan, 200)

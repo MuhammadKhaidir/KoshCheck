@@ -1,6 +1,5 @@
-import { startingPrice, surveyPlans } from '../src/content/site.js';
-
-const MAX_AMOUNT = Math.max(...surveyPlans.map((plan) => plan.price));
+import { surveyPlans } from '../src/content/site.js';
+import { pricePlan } from '../src/lib/openingPromo.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -15,21 +14,22 @@ export default async function handler(req, res) {
   const isProd = MIDTRANS_IS_PRODUCTION === 'true';
   const base = isProd ? 'https://app.midtrans.com' : 'https://app.sandbox.midtrans.com';
 
-  const { amount, itemName, customer } = req.body || {};
-  const gross = Number(amount);
-  if (!Number.isInteger(gross) || gross < startingPrice || gross > MAX_AMOUNT) {
-    return res.status(400).json({ error: 'amount tidak valid' });
+  const { paket, customer } = req.body || {};
+  const plan = pricePlan(surveyPlans.find((p) => p.id === paket));
+  if (!plan) {
+    return res.status(400).json({ error: 'Paket survei tidak valid' });
   }
+  const gross = plan.price;
 
   const orderId = `KC-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
   const payload = {
     transaction_details: { order_id: orderId, gross_amount: gross },
     item_details: [
       {
-        id: 'paket',
+        id: plan.id,
         price: gross,
         quantity: 1,
-        name: String(itemName || 'Paket KOSCHECK').slice(0, 50),
+        name: plan.name.slice(0, 50),
       },
     ],
   };

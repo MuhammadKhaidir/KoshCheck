@@ -3,21 +3,35 @@ import SectionHead from '../ui/SectionHead.jsx'
 import Icon from '../ui/Icon.jsx'
 import Button from '../ui/Button.jsx'
 import OrderButton from '../ui/OrderButton.jsx'
+import promoStyle from './OpeningPromo.module.css'
 import { freeCatalogPlan, ownerPlans, plans, surveyPlans } from '../../content/site.js'
+import { pricePlan, promoActive, countdown } from '../../lib/openingPromo.js'
+import { usePromoClock } from '../../lib/usePromoClock.js'
 import { rupiah } from '../../lib/format.js'
 import s from './Plans.module.css'
 
 export default function Plans() {
+  const now = usePromoClock()
+  const active = promoActive(now)
+  const surveys = surveyPlans.map((p) => pricePlan(p, now))
+  const owners = ownerPlans.items.map((p) => pricePlan(p, now))
   const { compare } = plans
   const bars = [
     { ...compare.selfTrip, kind: 'trip' },
-    ...[...surveyPlans].sort((a, b) => b.price - a.price).map((p) => ({ label: p.name, price: p.price, kind: 'plan' })),
+    ...[...surveys].sort((a, b) => b.price - a.price).map((p) => ({ label: p.name, price: p.price, kind: 'plan' })),
   ]
   const max = Math.max(...bars.map((b) => b.price))
 
   return (
     <Section id="harga">
       <SectionHead title={plans.title} lede={plans.lede} />
+      {active && (
+        <div className={promoStyle.promoBanner}>
+          <strong>GRAND OPENING • 23–30 November 2026</strong>
+          <span>Promo berakhir 30 November, 23.59 WIB</span>
+          <span aria-label="Sisa waktu promo">{countdown(now)}</span>
+        </div>
+      )}
 
       <div className={s.layout}>
         <figure className={s.compare}>
@@ -39,7 +53,7 @@ export default function Plans() {
           <p className={s.compareNote}>{compare.note}</p>
         </figure>
 
-        <PlanCards items={surveyPlans} survey />
+        <PlanCards items={surveys} survey />
       </div>
       <div className={s.planGroup}>
         <PlanCards items={[freeCatalogPlan]} survey />
@@ -47,7 +61,7 @@ export default function Plans() {
 
       <div className={s.planGroup}>
         <SectionHead title={ownerPlans.title} lede={ownerPlans.lede} />
-        <PlanCards items={ownerPlans.items} />
+        <PlanCards items={owners} />
       </div>
     </Section>
   )
@@ -63,6 +77,7 @@ function PlanCards({ items, survey = false }) {
             <p className={s.planSummary}>{plan.summary}</p>
           </div>
           <div>
+            {plan.promo && <p className={promoStyle.normalPrice}><s>{rupiah(plan.normalPrice)}</s> <span>Hemat {rupiah(plan.normalPrice - plan.price)}</span></p>}
             <p className={s.price}>{rupiah(plan.price)}</p>
             {plan.duration && <p className={s.planSummary}>{plan.duration}</p>}
           </div>

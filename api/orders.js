@@ -7,12 +7,13 @@
     -> 201 { orderId, amount, planName }
 */
 import { plans } from '../src/content/site.js'
+import { pricePlan } from '../src/lib/openingPromo.js'
 import { insertOrder, newId } from './_db.js'
 
 const clip = (value, max) => (typeof value === 'string' ? value.trim().slice(0, max) : '')
 
 export async function createOrder(body, env) {
-  const plan = plans.items.find((p) => p.id === body?.paket)
+  const plan = pricePlan(plans.items.find((p) => p.id === body?.paket))
   const nama = clip(body?.nama, 60)
   const kos = clip(body?.kos, 200)
   const catatan = clip(body?.catatan, 200)

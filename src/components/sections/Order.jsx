@@ -5,6 +5,8 @@ import Button from '../ui/Button.jsx'
 import DummyPay from '../pay/DummyPay.jsx'
 import { useOrderIntent } from '../../context/OrderIntent.jsx'
 import { order, surveyPlans, contact, brand } from '../../content/site.js'
+import { pricePlan } from '../../lib/openingPromo.js'
+import { usePromoClock } from '../../lib/usePromoClock.js'
 import { rupiah } from '../../lib/format.js'
 import s from './Order.module.css'
 
@@ -26,10 +28,10 @@ const PAY_MESSAGE = {
 }
 
 /** Teks WhatsApp untuk bertanya sebelum memesan survei. Ubah template di sini. */
-function composeMessage(f) {
+function composeMessage(f, now) {
   const nama = f.nama.trim() || '(nama)'
   const catatan = f.catatan.trim() ? ` Catatan: ${f.catatan.trim()}` : ''
-  const plan = surveyPlans.find((p) => p.id === f.paket) ?? surveyPlans[0]
+  const plan = pricePlan(surveyPlans.find((p) => p.id === f.paket) ?? surveyPlans[0], now)
   const kos = f.kos.trim() || '(nama kos atau link iklan)'
   return `Halo ${brand.name}, saya ${nama}. Saya ingin memesan ${plan.name} (${rupiah(plan.price)}) untuk kos: ${kos}.${catatan}`
 }
@@ -48,6 +50,7 @@ async function postJson(url, payload) {
 
 export default function Order() {
   const uid = useId().replace(/:/g, '')
+  const now = usePromoClock()
   const { intent } = useOrderIntent()
   const [mode, setMode] = useState('survei')
   const [forms, setForms] = useState(initialForms)
@@ -82,10 +85,10 @@ export default function Order() {
     setForms((prev) => ({ ...prev, [mode]: { ...prev[mode], [field]: value } }))
   }
 
-  const waMessage = composeMessage(forms.survei)
+  const waMessage = composeMessage(forms.survei, now)
   const waUrl = contact.whatsapp ? `https://wa.me/${contact.whatsapp}?text=${encodeURIComponent(waMessage)}` : ''
 
-  const plan = surveyPlans.find((p) => p.id === forms.survei.paket) ?? surveyPlans[0]
+  const plan = pricePlan(surveyPlans.find((p) => p.id === forms.survei.paket) ?? surveyPlans[0], now)
 
   /** Pesan survei: simpan pesanan ke backend (/api/orders), lalu buka tampilan pembayaran dummy. */
   async function startOrder() {
@@ -222,9 +225,9 @@ export default function Order() {
               <div className={s.field}>
                 <label htmlFor={id('paket')}>Paket</label>
                 <select id={id('paket')} value={form.paket} onChange={update('paket')}>
-                  {surveyPlans.map((p) => (
+                  {surveyPlans.map((p) => pricePlan(p, now)).map((p) => (
                     <option key={p.id} value={p.id}>
-                      {p.name}, {rupiah(p.price)}
+                      {p.name}, {rupiah(p.price)}{p.promo ? ' (Opening)' : ''}
                     </option>
                   ))}
                 </select>

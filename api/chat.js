@@ -15,17 +15,21 @@
   Mau pakai penyedia AI lain (OpenAI, Gemini, dll)? Ubah fungsi askModel() saja.
 */
 import { brand, hero, freeCatalogPlan, plans, surveyPlans, ownerPlans, owners, faq, disclaimer } from '../src/content/site.js'
+import { pricePlan, promoActive } from '../src/lib/openingPromo.js'
 import { rupiah } from '../src/lib/format.js'
 
 const daftarKos = 'Data listing aktual belum tersedia di asisten. Buka katalog website atau hubungi tim KOSCHECK.'
 
-const daftarPaket = (items) => items
-  .map((p) => `- ${p.name}, ${rupiah(p.price)}${p.duration ? ` (${p.duration})` : ''}: ${p.summary} Isi: ${p.includes.join('; ')}.`)
+const daftarPaket = (items, now) => items
+  .map((p) => pricePlan(p, now))
+  .map((p) => `- ${p.name}, ${rupiah(p.price)}${p.promo ? ` (promo; normal ${rupiah(p.normalPrice)})` : ''}${p.duration ? ` (${p.duration})` : ''}: ${p.summary} Isi: ${p.includes.join('; ')}.`)
   .join('\n')
 
 const daftarFaq = faq.items.map((i) => `T: ${i.q}\nJ: ${i.a}`).join('\n')
 
-const SYSTEM = `Kamu asisten chat di situs ${brand.name} ("${brand.tagline}"), platform pencarian dan verifikasi kos di ${brand.city}. Kamu menjawab pertanyaan calon penghuni dan pemilik kos.
+const SYSTEM = (now = Date.now()) => `Kamu asisten chat di situs ${brand.name} ("${brand.tagline}"), platform pencarian dan verifikasi kos di ${brand.city}. Kamu menjawab pertanyaan calon penghuni dan pemilik kos.
+
+${promoActive(now) ? "Promo opening berlaku 23–30 November 2026 WIB. Harga promo pada daftar paket berlaku sekarang; FAQ memuat harga normal." : "Promo opening tidak aktif. Harga normal berlaku."}
 
 Aturan menjawab:
 - Pakai Bahasa Indonesia yang ramah dan lugas, sapaan "kamu". Maksimal 4 kalimat. Teks biasa, tanpa markdown dan tanpa daftar bertanda.
@@ -38,10 +42,10 @@ Tentang layanan: ${hero.lede}
 
 ${plans.title}:
 ${plans.lede}
-${daftarPaket(surveyPlans)}
+${daftarPaket(surveyPlans, now)}
 
 ${ownerPlans.title}:
-${daftarPaket(ownerPlans.items)}
+${daftarPaket(ownerPlans.items, now)}
 
 Katalog kos (gratis; data listing aktual belum tersedia di asisten ini, arahkan pengguna ke katalog website):
 ${daftarPaket([freeCatalogPlan])}
@@ -80,7 +84,7 @@ async function askOpenRouter(model, messages, env) {
     body: JSON.stringify({
       model,
       max_tokens: Number(env.AI_MAX_TOKENS) || 600,
-      messages: [{ role: 'system', content: SYSTEM }, ...messages],
+      messages: [{ role: 'system', content: SYSTEM() }, ...messages],
     }),
     signal: AbortSignal.timeout(7000),
   })
@@ -124,7 +128,7 @@ async function askModel(messages, env) {
     body: JSON.stringify({
       model: daftarModel(env, 'claude-haiku-5-5')[0],
       max_tokens: 400,
-      system: SYSTEM,
+      system: SYSTEM(),
       messages,
     }),
   })

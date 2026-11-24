@@ -149,7 +149,7 @@ export const hero = {
   lede: 'KOSCHECK memeriksa kos langsung ke lokasi, lalu mengirim foto, video, dan laporan kondisinya, sebelum kamu membayar sewa.',
   primaryCta: 'Pesan survei kos',
   secondaryCta: 'Lihat katalog gratis',
-  note: `Katalog gratis. Survei mulai ${rupiah(startingPrice)}. Khusus kos di Palembang.`,
+  note: `Katalog gratis. Harga normal survei mulai ${rupiah(startingPrice)}. Khusus kos di Palembang.`,
 }
 
 export const problems = {
@@ -230,7 +230,7 @@ export const faq = {
     },
     {
       q: 'Apa saja yang gratis dan yang berbayar?',
-      a: `Katalog dan pencarian gratis. Layanan survei Check Kost berbayar, mulai ${rupiah(startingPrice)}.`,
+      a: `Katalog dan pencarian gratis. Harga normal layanan survei mulai ${rupiah(startingPrice)}. Lihat bagian Harga untuk promo aktif.`,
     },
   ],
 }
