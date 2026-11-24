@@ -54,6 +54,8 @@ export default function AdminPage() {
   const [editingListing, setEditingListing] = useState(null)
   const [listingError, setListingError] = useState('')
   const [listingBusy, setListingBusy] = useState('')
+  const [orderError, setOrderError] = useState('')
+  const [orderBusy, setOrderBusy] = useState('')
 
   const load = useCallback(async () => {
     const token = getToken()
@@ -144,6 +146,31 @@ export default function AdminPage() {
       setListingError(err.message)
     } finally {
       setListingBusy('')
+    }
+  }
+
+  async function removeOrder(order) {
+    if (!window.confirm(`Hapus riwayat transaksi ${order.id} atas nama ${order.nama}? Data ini akan dihapus permanen dan statistik pemesanan ikut diperbarui.`)) return
+    setOrderBusy(order.id)
+    setOrderError('')
+    try {
+      const res = await fetch('/api/admin-orders', {
+        method: 'DELETE',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${getToken()}` },
+        body: JSON.stringify({ id: order.id }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (res.status === 401) {
+        clearToken()
+        setState('nologin')
+        return
+      }
+      if (!res.ok) throw new Error(json.error || `HTTP ${res.status}`)
+      await load()
+    } catch (err) {
+      setOrderError(err.message)
+    } finally {
+      setOrderBusy('')
     }
   }
 
@@ -261,6 +288,8 @@ export default function AdminPage() {
                 </div>
               </div>
 
+              {orderError && <p className={s.error} role="alert">{orderError}</p>}
+
               {shown.length === 0 ? (
                 <p className={s.empty}>{orders.length === 0 ? 'Belum ada pesanan.' : 'Tidak ada pesanan dengan status ini.'}</p>
               ) : (
@@ -276,6 +305,7 @@ export default function AdminPage() {
                         <th scope="col">Status</th>
                         <th scope="col">Metode</th>
                         <th scope="col">No. pesanan</th>
+                        <th scope="col">Aksi</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -302,6 +332,11 @@ export default function AdminPage() {
                             </td>
                             <td className={s.nowrap}>{METODE[o.metode] ?? o.metode ?? '-'}</td>
                             <td className={s.nowrap}>{o.id}</td>
+                            <td className={s.nowrap}>
+                              <button type="button" className={`${s.actionButton} ${s.deleteButton}`} disabled={Boolean(orderBusy)} onClick={() => removeOrder(o)}>
+                                {orderBusy === o.id ? 'Menghapus…' : 'Hapus'}
+                              </button>
+                            </td>
                           </tr>
                         )
                       })}

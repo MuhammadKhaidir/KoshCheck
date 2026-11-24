@@ -167,6 +167,21 @@ export async function setOrderStatus(env, id, status, metode) {
   return row ?? null
 }
 
+/** Hapus satu riwayat pesanan survei tanpa menyentuh data listing kos. */
+export async function deleteOrder(env, id) {
+  if (!usePostgres(env)) {
+    assertFileAllowed(env)
+    return updateJson((db) => {
+      const index = db.orders.findIndex((item) => item.id === id)
+      if (index < 0) return null
+      return db.orders.splice(index, 1)[0]
+    })
+  }
+  const sql = await getSql(env)
+  const [row] = await sql`delete from orders where id = ${id} returning id`
+  return row ?? null
+}
+
 export async function insertListing(env, l) {
   if (!usePostgres(env)) {
     assertFileAllowed(env)

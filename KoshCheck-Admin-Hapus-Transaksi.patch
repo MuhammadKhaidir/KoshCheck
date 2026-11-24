@@ -1,0 +1,176 @@
+diff --git a/api/_db.js b/api/_db.js
+--- a/api/_db.js
++++ b/api/_db.js
+@@ -165,9 +165,24 @@ export async function setOrderStatus(env, id, status, metode) {
+     returning *`
+   return row ?? null
+ }
+ 
++/** Hapus satu riwayat pesanan survei tanpa menyentuh data listing kos. */
++export async function deleteOrder(env, id) {
++  if (!usePostgres(env)) {
++    assertFileAllowed(env)
++    return updateJson((db) => {
++      const index = db.orders.findIndex((item) => item.id === id)
++      if (index < 0) return null
++      return db.orders.splice(index, 1)[0]
++    })
++  }
++  const sql = await getSql(env)
++  const [row] = await sql`delete from orders where id = ${id} returning id`
++  return row ?? null
++}
++
+ export async function insertListing(env, l) {
+   if (!usePostgres(env)) {
+     assertFileAllowed(env)
+     return updateJson((db) => {
+       const row = {
+diff --git a/api/admin-orders.js b/api/admin-orders.js
+new file mode 100644
+--- /dev/null
++++ b/api/admin-orders.js
+@@ -0,0 +1,27 @@
++/* Endpoint khusus admin untuk menghapus satu riwayat pesanan survei. */
++import { isAdmin } from './_auth.js'
++import { deleteOrder as removeOrderById } from './_db.js'
++
++export async function deleteOrder(body, env, req) {
++  if (!env.ADMIN_KEY) return { status: 503, data: { error: 'ADMIN_KEY belum diisi.' } }
++  if (!isAdmin(req, env)) return { status: 401, data: { error: 'Belum masuk atau sesi sudah habis.' } }
++
++  const id = typeof body?.id === 'string' ? body.id.trim() : ''
++  if (!id || id.length > 100) return { status: 400, data: { error: 'ID pesanan tidak valid.' } }
++
++  try {
++    const row = await removeOrderById(env, id)
++    if (!row) return { status: 404, data: { error: 'Riwayat transaksi tidak ditemukan.' } }
++  } catch (err) {
++    console.error('[admin-orders:delete]', err)
++    return { status: 500, data: { error: 'Riwayat transaksi belum bisa dihapus.' } }
++  }
++
++  return { status: 200, data: { deleted: true, orderId: id } }
++}
++
++export default async function handler(req, res) {
++  if (req.method !== 'DELETE') return res.status(405).json({ error: 'Gunakan DELETE.' })
++  const { status, data } = await deleteOrder(req.body, process.env, req)
++  res.status(status).json(data)
++}
+diff --git a/src/pages/AdminPage.jsx b/src/pages/AdminPage.jsx
+--- a/src/pages/AdminPage.jsx
++++ b/src/pages/AdminPage.jsx
+@@ -53,7 +53,9 @@ export default function AdminPage() {
+   const [filter, setFilter] = useState('all')
+   const [editingListing, setEditingListing] = useState(null)
+   const [listingError, setListingError] = useState('')
+   const [listingBusy, setListingBusy] = useState('')
++  const [orderError, setOrderError] = useState('')
++  const [orderBusy, setOrderBusy] = useState('')
+ 
+   const load = useCallback(async () => {
+     const token = getToken()
+@@ -148,6 +150,31 @@ export default function AdminPage() {
+     }
+   }
+ 
++  async function removeOrder(order) {
++    if (!window.confirm(`Hapus riwayat transaksi ${order.id} atas nama ${order.nama}? Data ini akan dihapus permanen dan statistik pemesanan ikut diperbarui.`)) return
++    setOrderBusy(order.id)
++    setOrderError('')
++    try {
++      const res = await fetch('/api/admin-orders', {
++        method: 'DELETE',
++        headers: { 'content-type': 'application/json', authorization: `Bearer ${getToken()}` },
++        body: JSON.stringify({ id: order.id }),
++      })
++      const json = await res.json().catch(() => ({}))
++      if (res.status === 401) {
++        clearToken()
++        setState('nologin')
++        return
++      }
++      if (!res.ok) throw new Error(json.error || `HTTP ${res.status}`)
++      await load()
++    } catch (err) {
++      setOrderError(err.message)
++    } finally {
++      setOrderBusy('')
++    }
++  }
++
+   function logout() {
+     clearToken()
+     window.location.hash = '#top'
+@@ -261,4 +261,6 @@ export default function AdminPage() {
+                 </div>
+               </div>
+ 
++              {orderError && <p className={s.error} role="alert">{orderError}</p>}
++
+               {shown.length === 0 ? (
+@@ -278,6 +307,7 @@ export default function AdminPage() {
+                         <th scope="col">Status</th>
+                         <th scope="col">Metode</th>
+                         <th scope="col">No. pesanan</th>
++                        <th scope="col">Aksi</th>
+                       </tr>
+                     </thead>
+                     <tbody>
+@@ -300,6 +330,11 @@ export default function AdminPage() {
+                             </td>
+                             <td className={s.nowrap}>{METODE[o.metode] ?? o.metode ?? '-'}</td>
+                             <td className={s.nowrap}>{o.id}</td>
++                            <td className={s.nowrap}>
++                              <button type="button" className={`${s.actionButton} ${s.deleteButton}`} disabled={Boolean(orderBusy)} onClick={() => removeOrder(o)}>
++                                {orderBusy === o.id ? 'Menghapus…' : 'Hapus'}
++                              </button>
++                            </td>
+                           </tr>
+                         )
+                       })}
+diff --git a/tests/kc-05-admin-order-delete.test.mjs b/tests/kc-05-admin-order-delete.test.mjs
+new file mode 100644
+--- /dev/null
++++ b/tests/kc-05-admin-order-delete.test.mjs
+@@ -0,0 +1,39 @@
++import test from 'node:test'
++import assert from 'node:assert/strict'
++import { mkdtemp, rm } from 'node:fs/promises'
++import { tmpdir } from 'node:os'
++import path from 'node:path'
++import { pathToFileURL } from 'node:url'
++
++const root = process.cwd()
++const temp = await mkdtemp(path.join(tmpdir(), 'koscheck-order-delete-'))
++process.chdir(temp)
++const load = (file) => import(pathToFileURL(path.join(root, file)).href)
++const { deleteOrder } = await load('api/admin-orders.js')
++const { insertOrder, getOrder } = await load('api/_db.js')
++
++const env = { ADMIN_KEY: 'test-only-admin-key' }
++const admin = { headers: { 'x-admin-key': env.ADMIN_KEY } }
++const guest = { headers: {} }
++
++test('admin can delete one order without deleting other orders', async () => {
++  await insertOrder(env, { id: 'KC-DELETE', nama: 'Test Hapus', whatsapp: '081234567890', kos: 'Kos A', paket: 'dasar', harga: 89000, catatan: '' })
++  await insertOrder(env, { id: 'KC-KEEP', nama: 'Test Simpan', whatsapp: '081234567891', kos: 'Kos B', paket: 'dasar', harga: 89000, catatan: '' })
++
++  assert.equal((await deleteOrder({ id: 'KC-DELETE' }, env, guest)).status, 401)
++  assert.ok(await getOrder(env, 'KC-DELETE'))
++
++  assert.equal((await deleteOrder({ id: '' }, env, admin)).status, 400)
++  assert.equal((await deleteOrder({ id: 'KC-MISSING' }, env, admin)).status, 404)
++
++  const result = await deleteOrder({ id: 'KC-DELETE' }, env, admin)
++  assert.equal(result.status, 200)
++  assert.equal(result.data.orderId, 'KC-DELETE')
++  assert.equal(await getOrder(env, 'KC-DELETE'), null)
++  assert.ok(await getOrder(env, 'KC-KEEP'))
++})
++
++test.after(async () => {
++  process.chdir(root)
++  await rm(temp, { recursive: true, force: true })
++})
