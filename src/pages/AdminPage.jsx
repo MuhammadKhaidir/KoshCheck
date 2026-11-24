@@ -154,7 +154,7 @@ export default function AdminPage() {
     setOrderBusy(order.id)
     setOrderError('')
     try {
-      const res = await fetch('/api/admin-orders', {
+      const res = await fetch('/api/admin', {
         method: 'DELETE',
         headers: { 'content-type': 'application/json', authorization: `Bearer ${getToken()}` },
         body: JSON.stringify({ id: order.id }),

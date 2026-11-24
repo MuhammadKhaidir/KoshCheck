@@ -1,0 +1,106 @@
+diff --git a/api/admin-orders.js b/api/admin-orders.js
+deleted file mode 100644
+index 9838d65..0000000
+--- a/api/admin-orders.js
++++ /dev/null
+@@ -1,27 +0,0 @@
+-/* Endpoint khusus admin untuk menghapus satu riwayat pesanan survei. */
+-import { isAdmin } from './_auth.js'
+-import { deleteOrder as removeOrderById } from './_db.js'
+-
+-export async function deleteOrder(body, env, req) {
+-  if (!env.ADMIN_KEY) return { status: 503, data: { error: 'ADMIN_KEY belum diisi.' } }
+-  if (!isAdmin(req, env)) return { status: 401, data: { error: 'Belum masuk atau sesi sudah habis.' } }
+-
+-  const id = typeof body?.id === 'string' ? body.id.trim() : ''
+-  if (!id || id.length > 100) return { status: 400, data: { error: 'ID pesanan tidak valid.' } }
+-
+-  try {
+-    const row = await removeOrderById(env, id)
+-    if (!row) return { status: 404, data: { error: 'Riwayat transaksi tidak ditemukan.' } }
+-  } catch (err) {
+-    console.error('[admin-orders:delete]', err)
+-    return { status: 500, data: { error: 'Riwayat transaksi belum bisa dihapus.' } }
+-  }
+-
+-  return { status: 200, data: { deleted: true, orderId: id } }
+-}
+-
+-export default async function handler(req, res) {
+-  if (req.method !== 'DELETE') return res.status(405).json({ error: 'Gunakan DELETE.' })
+-  const { status, data } = await deleteOrder(req.body, process.env, req)
+-  res.status(status).json(data)
+-}
+diff --git a/api/admin.js b/api/admin.js
+index d9239d5..5511f8f 100644
+--- a/api/admin.js
++++ b/api/admin.js
+@@ -12,7 +12,7 @@
+     -> { orders: [...], listings: [...] }   (terbaru di atas)
+ */
+ import { isAdmin } from './_auth.js'
+-import { listAll } from './_db.js'
++import { deleteOrder as removeOrderById, listAll } from './_db.js'
+ 
+ export async function listData(_body, env, req) {
+   if (!env.ADMIN_KEY) return { status: 503, data: { error: 'ADMIN_KEY belum diisi.' } }
+@@ -25,8 +25,32 @@ export async function listData(_body, env, req) {
+   }
+ }
+ 
++export async function deleteOrder(body, env, req) {
++  if (!env.ADMIN_KEY) return { status: 503, data: { error: 'ADMIN_KEY belum diisi.' } }
++  if (!isAdmin(req, env)) return { status: 401, data: { error: 'Belum masuk atau sesi sudah habis.' } }
++
++  const id = typeof body?.id === 'string' ? body.id.trim() : ''
++  if (!id || id.length > 100) return { status: 400, data: { error: 'ID pesanan tidak valid.' } }
++
++  try {
++    const row = await removeOrderById(env, id)
++    if (!row) return { status: 404, data: { error: 'Riwayat transaksi tidak ditemukan.' } }
++  } catch (err) {
++    console.error('[admin:delete-order]', err)
++    return { status: 500, data: { error: 'Riwayat transaksi belum bisa dihapus.' } }
++  }
++
++  return { status: 200, data: { deleted: true, orderId: id } }
++}
++
+ export default async function handler(req, res) {
+-  if (req.method !== 'GET') return res.status(405).json({ error: 'Gunakan GET.' })
+-  const { status, data } = await listData(null, process.env, req)
+-  res.status(status).json(data)
++  if (req.method === 'GET') {
++    const { status, data } = await listData(null, process.env, req)
++    return res.status(status).json(data)
++  }
++  if (req.method === 'DELETE') {
++    const { status, data } = await deleteOrder(req.body, process.env, req)
++    return res.status(status).json(data)
++  }
++  return res.status(405).json({ error: 'Gunakan GET atau DELETE.' })
+ }
+diff --git a/src/pages/AdminPage.jsx b/src/pages/AdminPage.jsx
+index a6f27de..83cab64 100644
+--- a/src/pages/AdminPage.jsx
++++ b/src/pages/AdminPage.jsx
+@@ -154,7 +154,7 @@
+     setOrderBusy(order.id)
+     setOrderError('')
+     try {
+-      const res = await fetch('/api/admin-orders', {
++      const res = await fetch('/api/admin', {
+         method: 'DELETE',
+         headers: { 'content-type': 'application/json', authorization: `Bearer ${getToken()}` },
+         body: JSON.stringify({ id: order.id }),
+diff --git a/tests/kc-05-admin-order-delete.test.mjs b/tests/kc-05-admin-order-delete.test.mjs
+index 07fca77..3fb7f49 100644
+--- a/tests/kc-05-admin-order-delete.test.mjs
++++ b/tests/kc-05-admin-order-delete.test.mjs
+@@ -9,5 +9,5 @@ const root = process.cwd()
+ const temp = await mkdtemp(path.join(tmpdir(), 'koscheck-order-delete-'))
+ process.chdir(temp)
+ const load = (file) => import(pathToFileURL(path.join(root, file)).href)
+-const { deleteOrder } = await load('api/admin-orders.js')
++const { deleteOrder } = await load('api/admin.js')
+ const { insertOrder, getOrder } = await load('api/_db.js')

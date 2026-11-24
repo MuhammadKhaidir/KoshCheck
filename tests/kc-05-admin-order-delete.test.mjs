@@ -9,7 +9,7 @@ const root = process.cwd()
 const temp = await mkdtemp(path.join(tmpdir(), 'koscheck-order-delete-'))
 process.chdir(temp)
 const load = (file) => import(pathToFileURL(path.join(root, file)).href)
-const { deleteOrder } = await load('api/admin-orders.js')
+const { deleteOrder } = await load('api/admin.js')
 const { insertOrder, getOrder } = await load('api/_db.js')
 
 const env = { ADMIN_KEY: 'test-only-admin-key' }
