@@ -54,6 +54,7 @@ function getSql(env) {
         alter table listings
           add column if not exists foto text,
           add column if not exists harga integer,
+          add column if not exists periode_harga text,
           add column if not exists tipe text,
           add column if not exists fasilitas text,
           add column if not exists publik boolean not null default false`
@@ -67,6 +68,7 @@ function getSql(env) {
           created_at  timestamptz not null default now()
         )`
       await sql`alter table listings add column if not exists owner_id text references owners(id)`
+      await sql`alter table owners add column if not exists initial_issued boolean not null default false`
       return sql
     })()
     g.__koshDb = { url: env.DATABASE_URL, ready }
@@ -173,6 +175,7 @@ export async function insertListing(env, l) {
         ...l,
         foto: l.foto ?? null,
         harga: l.harga ?? null,
+        periode_harga: l.periode_harga ?? null,
         tipe: l.tipe ?? null,
         fasilitas: l.fasilitas ?? null,
         publik: l.publik ?? false,
@@ -185,20 +188,21 @@ export async function insertListing(env, l) {
   }
   const sql = await getSql(env)
   const [row] = await sql`
-    insert into listings (id, nama, whatsapp, kos, area, catatan, foto, harga, tipe, fasilitas, publik)
+    insert into listings (id, nama, whatsapp, kos, area, catatan, foto, harga, periode_harga, tipe, fasilitas, publik)
     values (${l.id}, ${l.nama}, ${l.whatsapp}, ${l.kos}, ${l.area}, ${l.catatan}, ${l.foto ?? null},
-            ${l.harga ?? null}, ${l.tipe ?? null}, ${l.fasilitas ?? null}, ${l.publik ?? false})
+            ${l.harga ?? null}, ${l.periode_harga ?? null}, ${l.tipe ?? null}, ${l.fasilitas ?? null}, ${l.publik ?? false})
     returning *`
   return row
 }
 
-/** Ubah data listing tanpa mengubah status publik, pemilik, atau tanggal pendaftaran. */
+/** Ubah listing; lepaskan relasi owner jika nomor kontak berubah. */
 export async function updateListing(env, id, l) {
   if (!usePostgres(env)) {
     assertFileAllowed(env)
     return updateJson((db) => {
       const row = db.listings.find((item) => item.id === id)
       if (!row) return null
+      if (normWa(row.whatsapp) !== normWa(l.whatsapp)) row.owner_id = null
       Object.assign(row, l)
       return row
     })
@@ -208,7 +212,8 @@ export async function updateListing(env, id, l) {
     update listings set
       nama = ${l.nama}, whatsapp = ${l.whatsapp}, kos = ${l.kos},
       area = ${l.area}, catatan = ${l.catatan}, foto = ${l.foto},
-      harga = ${l.harga}, tipe = ${l.tipe}, fasilitas = ${l.fasilitas}
+      owner_id = case when whatsapp = ${l.whatsapp} then owner_id else null end,
+      harga = ${l.harga}, periode_harga = ${l.periode_harga}, tipe = ${l.tipe}, fasilitas = ${l.fasilitas}
     where id = ${id}
     returning *`
   return row ?? null
@@ -237,7 +242,7 @@ export async function listPublicListings(env) {
   }
   const sql = await getSql(env)
   return sql`
-    select id, kos, area, tipe, harga, fasilitas, foto from listings
+    select id, kos, area, tipe, harga, periode_harga, fasilitas, foto from listings
     where publik order by created_at desc limit 100`
 }
 
@@ -337,16 +342,35 @@ export async function insertOwner(env, o) {
   return row ?? getOwnerByWa(env, o.whatsapp)
 }
 
-export async function setOwnerPassword(env, id, passHash) {
+export async function replaceInitialOwnerPassword(env, id, passHash) {
   if (!usePostgres(env)) {
     assertFileAllowed(env)
-    return updateJson((db) => {
-      const row = db.owners.find((o) => o.id === id)
-      if (row) Object.assign(row, { pass_hash: passHash, must_change: false })
+    return updateJson(db => {
+      const row = db.owners.find(o => o.id === id && o.must_change)
+      if (!row) return false
+      row.pass_hash = passHash
+      row.initial_issued = true
+      return true
     })
   }
   const sql = await getSql(env)
-  await sql`update owners set pass_hash = ${passHash}, must_change = false where id = ${id}`
+  const [row] = await sql`update owners set pass_hash = ${passHash}, initial_issued = true where id = ${id} and must_change returning id`
+  return Boolean(row)
+}
+
+export async function setOwnerPassword(env, id, passHash, previousHash) {
+  if (!usePostgres(env)) {
+    assertFileAllowed(env)
+    return updateJson((db) => {
+      const row = db.owners.find((o) => o.id === id && o.pass_hash === previousHash)
+      if (!row) return false
+      Object.assign(row, { pass_hash: passHash, must_change: false })
+      return true
+    })
+  }
+  const sql = await getSql(env)
+  const [row] = await sql`update owners set pass_hash = ${passHash}, must_change = false where id = ${id} and pass_hash = ${previousHash} returning id`
+  return Boolean(row)
 }
 
 /** Semua kos yang nomor WhatsApp-nya (setelah dinormalkan) sama dengan wa. Isi: id, nama, whatsapp, owner_id. */
@@ -358,21 +382,31 @@ export async function listingsByWa(env, wa) {
   } else {
     const sql = await getSql(env)
     rows = await sql`
-      select id, nama, whatsapp, owner_id from listings
+      select id, nama, whatsapp, owner_id, publik from listings
       where regexp_replace(whatsapp, '[^0-9]', '', 'g') like ${'%' + wa.slice(-8)}`
   }
   return rows.filter((r) => normWa(r.whatsapp) === wa)
 }
 
 export async function setListingsOwner(env, ids, ownerId) {
+  if (!ids.length) return
   if (!usePostgres(env)) {
     assertFileAllowed(env)
     return updateJson((db) => {
-      for (const l of db.listings) if (ids.includes(l.id) && !l.owner_id) l.owner_id = ownerId
+      const owner = db.owners.find(o => o.id === ownerId)
+      if (!owner) return
+      for (const l of db.listings) {
+        if (ids.includes(l.id) && l.publik && !l.owner_id && normWa(l.whatsapp) === owner.whatsapp) l.owner_id = ownerId
+      }
     })
   }
   const sql = await getSql(env)
-  await sql`update listings set owner_id = ${ownerId} where id in ${sql(ids)} and owner_id is null`
+  await sql`update listings as l set owner_id = ${ownerId}
+    from owners as o where o.id = ${ownerId} and l.id in ${sql(ids)}
+    and l.owner_id is null and l.publik
+    and (case when regexp_replace(l.whatsapp, '[^0-9]', '', 'g') like '0%'
+      then '62' || substring(regexp_replace(l.whatsapp, '[^0-9]', '', 'g') from 2)
+      else regexp_replace(l.whatsapp, '[^0-9]', '', 'g') end) = o.whatsapp`
 }
 
 /**
@@ -381,19 +415,24 @@ export async function setListingsOwner(env, ids, ownerId) {
  * Pesanan dicocokkan lewat nama kos (orders.kos). Data pemesan tidak ikut.
  */
 export async function listOwnerKos(env, ownerId) {
+  const owner = await getOwnerById(env, ownerId)
+  if (!owner) return []
   const key = (v) => String(v ?? '').trim().toLowerCase()
   let listings
   let orders
   if (!usePostgres(env)) {
     assertFileAllowed(env)
     const db = await readJson()
-    listings = db.listings.filter((l) => l.owner_id === ownerId).reverse()
+    listings = db.listings.filter((l) => l.owner_id === ownerId && l.publik && normWa(l.whatsapp) === owner.whatsapp).reverse()
     orders = db.orders
   } else {
     const sql = await getSql(env)
     listings = await sql`
-      select id, kos, area, tipe, harga, created_at from listings
-      where owner_id = ${ownerId} order by created_at desc`
+      select id, kos, area, tipe, harga, periode_harga, created_at from listings
+      where owner_id = ${ownerId} and publik and (case when regexp_replace(whatsapp, '[^0-9]', '', 'g') like '0%'
+        then '62' || substring(regexp_replace(whatsapp, '[^0-9]', '', 'g') from 2)
+        else regexp_replace(whatsapp, '[^0-9]', '', 'g') end) = ${owner.whatsapp}
+      order by created_at desc`
     orders = listings.length
       ? await sql`select kos, status from orders where lower(trim(kos)) in ${sql(listings.map((l) => key(l.kos)))}`
       : []
@@ -401,6 +440,6 @@ export async function listOwnerKos(env, ownerId) {
   return listings.map((l) => {
     const mine = orders.filter((o) => key(o.kos) === key(l.kos))
     const status = mine.some((o) => o.status === 'paid') ? 'dipesan' : mine.some((o) => o.status === 'pending') ? 'menunggu' : 'belum'
-    return { id: l.id, kos: l.kos, area: l.area, tipe: l.tipe, harga: l.harga, created_at: l.created_at, status }
+    return { id: l.id, kos: l.kos, area: l.area, tipe: l.tipe, harga: l.harga, periode_harga: l.periode_harga ?? null, created_at: l.created_at, status }
   })
 }

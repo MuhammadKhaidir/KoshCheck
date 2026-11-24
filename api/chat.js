@@ -15,16 +15,9 @@
   Mau pakai penyedia AI lain (OpenAI, Gemini, dll)? Ubah fungsi askModel() saja.
 */
 import { brand, hero, freeCatalogPlan, plans, surveyPlans, ownerPlans, owners, faq, disclaimer } from '../src/content/site.js'
-import { kos } from '../src/data/kos.js'
-import { rupiah, tanggal } from '../src/lib/format.js'
+import { rupiah } from '../src/lib/format.js'
 
-const daftarKos = kos
-  .map(
-    (k) =>
-      `- ${k.nama}, ${k.area}, ${k.tipe}, ${rupiah(k.harga)}/bulan, fasilitas: ${k.fasilitas.join(', ')}, ` +
-      (k.verified ? `Kos Terverifikasi (dicek ${tanggal(k.dicekPada, true)})` : 'belum disurvei'),
-  )
-  .join('\n')
+const daftarKos = 'Data listing aktual belum tersedia di asisten. Buka katalog website atau hubungi tim KOSCHECK.'
 
 const daftarPaket = (items) => items
   .map((p) => `- ${p.name}, ${rupiah(p.price)}${p.duration ? ` (${p.duration})` : ''}: ${p.summary} Isi: ${p.includes.join('; ')}.`)
@@ -50,7 +43,7 @@ ${daftarPaket(surveyPlans)}
 ${ownerPlans.title}:
 ${daftarPaket(ownerPlans.items)}
 
-Katalog kos (gratis, data contoh):
+Katalog kos (gratis; data listing aktual belum tersedia di asisten ini, arahkan pengguna ke katalog website):
 ${daftarPaket([freeCatalogPlan])}
 ${daftarKos}
 

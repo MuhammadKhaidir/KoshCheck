@@ -139,7 +139,7 @@ export default function DummyPay({ order, onFinish, onClose }) {
     >
       <div className={s.body}>
         <h2 id={titleId} className={s.title}>
-          Pembayaran
+          Simulasi pembayaran (tanpa uang sungguhan)
         </h2>
 
         <dl className={s.summary}>

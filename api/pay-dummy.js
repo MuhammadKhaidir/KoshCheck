@@ -14,7 +14,7 @@ const HASIL = ['paid', 'failed', 'pending']
 const clip = (value, max) => (typeof value === 'string' ? value.trim().slice(0, max) : '')
 
 export async function dummyPay(body, env) {
-  if (env.MIDTRANS_SERVER_KEY) {
+  if (env.VERCEL || process.env.VERCEL || env.NODE_ENV === 'production' || process.env.NODE_ENV === 'production' || env.ENABLE_DUMMY_PAYMENT !== 'true' || env.DATABASE_URL || env.MIDTRANS_SERVER_KEY) {
     return { status: 403, data: { error: 'Pembayaran tidak bisa diproses lewat jalur ini.' } }
   }
   const orderId = clip(body?.orderId, 60)

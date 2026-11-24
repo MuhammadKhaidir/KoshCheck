@@ -27,9 +27,11 @@ export async function addListing(body, env, req) {
 
   const tipe = TIPE.find((t) => t === body?.tipe)
   const harga = Number(body?.harga)
+  const periode_harga = body?.periode_harga
   if (!tipe) return { status: 400, data: { error: 'Tipe kos belum dipilih.' } }
+  if (!['bulan', 'tahun'].includes(periode_harga)) return { status: 400, data: { error: 'Pilih periode harga.' } }
   if (!Number.isInteger(harga) || harga < 50_000 || harga > 50_000_000) {
-    return { status: 400, data: { error: 'Harga per bulan belum benar.' } }
+    return { status: 400, data: { error: 'Harga sewa belum benar.' } }
   }
   const fasilitas = FASILITAS.filter((f) => Array.isArray(body?.fasilitas) && body.fasilitas.includes(f)).join(',')
 
@@ -43,7 +45,7 @@ export async function addListing(body, env, req) {
 
   const id = newId('KL')
   try {
-    await insertListing(env, { id, ...value, foto, tipe, harga, fasilitas, publik: true })
+    await insertListing(env, { id, ...value, foto, tipe, harga, periode_harga, fasilitas, publik: true })
   } catch (err) {
     console.error('[admin-listings]', err)
     return { status: 500, data: { error: 'Listing belum bisa disimpan. Coba lagi sebentar.' } }
@@ -61,9 +63,11 @@ export async function editListing(body, env, req) {
   if (error) return { status: 400, data: { error } }
   const tipe = TIPE.find((item) => item === body?.tipe)
   const harga = Number(body?.harga)
+  const periode_harga = body?.periode_harga
   if (!tipe) return { status: 400, data: { error: 'Tipe kos belum dipilih.' } }
+  if (!['bulan', 'tahun'].includes(periode_harga)) return { status: 400, data: { error: 'Pilih periode harga.' } }
   if (!Number.isInteger(harga) || harga < 50_000 || harga > 50_000_000) {
-    return { status: 400, data: { error: 'Harga per bulan belum benar.' } }
+    return { status: 400, data: { error: 'Harga sewa belum benar.' } }
   }
 
   let foto = null
@@ -76,7 +80,7 @@ export async function editListing(body, env, req) {
   const fasilitas = FASILITAS.filter((item) => Array.isArray(body?.fasilitas) && body.fasilitas.includes(item)).join(',')
 
   try {
-    const row = await saveListing(env, id, { ...value, foto, tipe, harga, fasilitas })
+    const row = await saveListing(env, id, { ...value, foto, tipe, harga, periode_harga, fasilitas })
     if (!row) return { status: 404, data: { error: 'Listing tidak ditemukan.' } }
   } catch (err) {
     console.error('[admin-listings:update]', err)

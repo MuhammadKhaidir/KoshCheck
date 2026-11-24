@@ -92,6 +92,10 @@ export default function Order() {
     setStatus('')
     setError('')
     setDone(null)
+    if (!import.meta.env.DEV || import.meta.env.VITE_ENABLE_DUMMY_PAYMENT !== 'true') {
+      setError('Pembayaran online belum aktif. Silakan hubungi tim KOSCHECK melalui WhatsApp.')
+      return
+    }
     setSending(true)
     try {
       const data = await postJson('/api/orders', form)
@@ -249,7 +253,7 @@ export default function Order() {
                 <>
                   <p className={s.previewLabel}>Yang kamu bayar</p>
                   <p className={s.previewText}>
-                    {plan.name}, {rupiah(plan.price)}. Metode pembayaran dipilih di langkah berikutnya.
+                    {plan.name}, {rupiah(plan.price)}. {import.meta.env.DEV && import.meta.env.VITE_ENABLE_DUMMY_PAYMENT === 'true' ? 'Simulasi lokal tanpa uang sungguhan.' : 'Hubungi tim KOSCHECK melalui WhatsApp untuk pemesanan.'}
                   </p>
                 </>
               ) : (
@@ -265,8 +269,8 @@ export default function Order() {
 
             {mode === 'survei' ? (
               <div className={s.actions}>
-                <Button as="button" type="submit" disabled={sending}>
-                  {sending ? 'Menyiapkan pembayaran' : `Bayar ${rupiah(plan.price)}`}
+                <Button as="button" type="submit" disabled={sending || !import.meta.env.DEV || import.meta.env.VITE_ENABLE_DUMMY_PAYMENT !== 'true'}>
+                  {sending ? 'Menyiapkan pembayaran' : import.meta.env.DEV && import.meta.env.VITE_ENABLE_DUMMY_PAYMENT === 'true' ? `Simulasi bayar ${rupiah(plan.price)}` : 'Pembayaran online belum aktif'}
                 </Button>
                 {waUrl && (
                   <Button as="a" variant="secondary" href={waUrl} target="_blank" rel="noopener noreferrer">

@@ -101,6 +101,26 @@ export default function AdminPage() {
 
   const shown = filter === 'all' ? orders : orders.filter((o) => o.status === filter)
 
+  async function provisionOwner(listing) {
+    if (!window.confirm('Pastikan nomor WhatsApp dan identitas pemilik telah diverifikasi. Buat password awal unik sekarang?')) return
+    setListingBusy(listing.id)
+    setListingError('')
+    try {
+      const res = await fetch('/api/owner', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${getToken()}` },
+        body: JSON.stringify({ action: 'provision', whatsapp: listing.whatsapp }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json.error || 'Password awal gagal dibuat.')
+      window.prompt('Salin password awal ini dan kirim secara pribadi kepada pemilik yang sudah diverifikasi:', json.temporaryPassword)
+    } catch (err) {
+      setListingError(err.message)
+    } finally {
+      setListingBusy('')
+    }
+  }
+
   async function removeListing(listing) {
     if (!window.confirm(`Hapus listing "${listing.kos}"? Data ini akan hilang dari katalog dan halaman admin. Riwayat pesanan tidak ikut dihapus.`)) return
     setListingBusy(listing.id)
@@ -337,12 +357,13 @@ export default function AdminPage() {
                           <td>{l.nama}</td>
                           <td className={s.nowrap}>
                             <WhatsApp number={l.whatsapp} />
+                            {l.publik && <button type="button" className={s.actionButton} disabled={Boolean(listingBusy)} onClick={() => provisionOwner(l)}>Buat password awal</button>}
                           </td>
                           <td className={s.wrap}>
                             {l.kos}
                             {l.publik && (
                               <span className={s.cell2}>
-                                Tayang di katalog: {rupiah(l.harga)}, {l.tipe}
+                                Tayang di katalog: {rupiah(l.harga)} {l.periode_harga === 'bulan' ? '/ bulan' : l.periode_harga === 'tahun' ? '/ tahun' : '(periode belum dikonfirmasi)'}, {l.tipe}
                                 {l.fasilitas ? `, ${l.fasilitas.split(',').join(', ')}` : ''}
                               </span>
                             )}

@@ -4,29 +4,31 @@ import SectionHead from '../ui/SectionHead.jsx'
 import Button from '../ui/Button.jsx'
 import KosItem from './KosItem.jsx'
 import { catalog } from '../../content/site.js'
-import { kos, FASILITAS, HARGA_MIN, HARGA_MAX, HARGA_STEP } from '../../data/kos.js'
+import { FASILITAS, HARGA_MIN, HARGA_MAX, HARGA_STEP } from '../../data/kos.js'
 import { rupiah } from '../../lib/format.js'
 import s from './Catalog.module.css'
 
-/** Katalog dengan filter harga, fasilitas, dan status verifikasi. Data dari src/data/kos.js. */
+/** Katalog listing dari database dengan filter harga, fasilitas, dan status verifikasi. */
 export default function Catalog() {
   const [maxPrice, setMaxPrice] = useState(null) // null = batas tertinggi (ikut harga termahal di katalog)
   const [fromDb, setFromDb] = useState([]) // listing yang ditambah admin, diambil dari /api/kos
+  const [loadError, setLoadError] = useState(false)
+  const monthly = (k) => k.periode_harga === 'tahun' ? k.harga / 12 : k.periode_harga === 'bulan' ? k.harga : null
 
   useEffect(() => {
     let alive = true
     fetch('/api/kos')
-      .then((r) => (r.ok ? r.json() : { kos: [] }))
-      .then((json) => alive && setFromDb(Array.isArray(json.kos) ? json.kos : []))
-      .catch(() => {}) // gagal ambil data: katalog tetap menampilkan data contoh
+      .then((r) => { if (!r.ok) throw new Error('Katalog gagal dimuat'); return r.json() })
+      .then((json) => { if (!Array.isArray(json.kos)) throw new Error('Data katalog tidak valid'); if (alive) setFromDb(json.kos) })
+      .catch(() => { if (alive) setLoadError(true) })
     return () => {
       alive = false
     }
   }, [])
 
-  const semua = useMemo(() => [...fromDb, ...kos], [fromDb])
+  const semua = fromDb
   const hargaMax = useMemo(
-    () => Math.max(HARGA_MAX, Math.ceil(Math.max(...semua.map((k) => k.harga)) / HARGA_STEP) * HARGA_STEP),
+    () => Math.max(HARGA_MAX, Math.ceil(Math.max(0, ...semua.map((k) => monthly(k) ?? 0)) / HARGA_STEP) * HARGA_STEP),
     [semua],
   )
   const limit = maxPrice ?? hargaMax
@@ -46,11 +48,11 @@ export default function Catalog() {
     () =>
       semua.filter(
         (k) =>
-          k.harga <= limit &&
+          (maxPrice === null || (monthly(k) !== null && monthly(k) <= limit)) &&
           (!onlyVerified || k.verified) &&
           picked.every((f) => k.fasilitas.includes(f)),
       ),
-    [semua, limit, onlyVerified, picked],
+    [semua, limit, maxPrice, onlyVerified, picked],
   )
 
   return (
@@ -60,7 +62,7 @@ export default function Catalog() {
       <div className={s.toolbar} role="group" aria-label="Saring katalog">
         <div className={s.field}>
           <label className={s.label} htmlFor="harga-maks">
-            Harga maksimal per bulan
+            Harga maksimal setara per bulan
           </label>
           <div className={s.rangeRow}>
             <input
@@ -104,6 +106,7 @@ export default function Catalog() {
         </label>
       </div>
 
+      {loadError && <p role="alert">Katalog belum bisa dimuat. Silakan muat ulang halaman.</p>}
       <p className={s.count} role="status">
         {results.length} kos ditemukan
       </p>
@@ -116,14 +119,14 @@ export default function Catalog() {
         </ul>
       ) : (
         <div className={s.empty}>
-          <p>Belum ada kos yang cocok. Naikkan batas harga atau lepas salah satu filter.</p>
+          <p>{loadError ? 'Data katalog tidak tersedia.' : semua.length === 0 ? 'Belum ada listing kos yang diterbitkan.' : 'Belum ada kos yang cocok. Naikkan batas harga atau lepas salah satu filter.'}</p>
           <Button as="button" variant="secondary" size="sm" onClick={reset}>
             Atur ulang filter
           </Button>
         </div>
       )}
 
-      <p className={s.sample}>{catalog.sampleNote}</p>
+      {/* Katalog hanya memuat listing aktual dari database. */}
     </Section>
   )
 }

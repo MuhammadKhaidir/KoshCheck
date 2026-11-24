@@ -9,8 +9,8 @@ import { sameSecret } from './_auth.js'
 
 const TOKEN_TTL_MS = 2 * 60 * 60 * 1000
 
-/** Password awal yang sama untuk semua pemilik. Ganti lewat env OWNER_DEFAULT_PASSWORD. */
-export const defaultPassword = (env) => env.OWNER_DEFAULT_PASSWORD || 'kosan12345'
+/** Password lama yang tidak boleh digunakan kembali (opsional). */
+export const defaultPassword = (env) => env.OWNER_DEFAULT_PASSWORD || ''
 
 const secretOf = (env) => {
   const base = env.OWNER_SECRET || env.ADMIN_KEY
@@ -33,13 +33,15 @@ export function checkPassword(password, stored) {
 
 const sign = (payload, secret) => createHmac('sha256', secret).update(payload).digest('base64url')
 
-export function makeOwnerToken(env, ownerId, now = Date.now()) {
+export function makeOwnerToken(env, ownerId, passwordHash, now = Date.now()) {
   const expiresAt = now + TOKEN_TTL_MS
-  const payload = Buffer.from(JSON.stringify({ oid: ownerId, exp: expiresAt })).toString('base64url')
+  const payload = Buffer.from(JSON.stringify({ oid: ownerId, exp: expiresAt, ver: sign(passwordHash, secretOf(env)) })).toString('base64url')
   return { token: `${payload}.${sign(payload, secretOf(env))}`, expiresAt }
 }
 
 /** Id pemilik dari header Authorization: Bearer <token>, atau null bila tidak sah / kedaluwarsa. */
+export const ownerTokenMatches = (env, session, owner) => Boolean(session && owner && sameSecret(session.ver, sign(owner.pass_hash, secretOf(env))))
+
 export function ownerIdFromRequest(req, env) {
   const secret = secretOf(env)
   const token = /^Bearer\s+(\S+)$/i.exec(req?.headers?.authorization ?? '')?.[1]
@@ -47,8 +49,8 @@ export function ownerIdFromRequest(req, env) {
   const parts = token.split('.')
   if (parts.length !== 2 || !sameSecret(parts[1], sign(parts[0], secret))) return null
   try {
-    const { oid, exp } = JSON.parse(Buffer.from(parts[0], 'base64url').toString())
-    return typeof oid === 'string' && exp > Date.now() ? oid : null
+    const { oid, exp, ver } = JSON.parse(Buffer.from(parts[0], 'base64url').toString())
+    return typeof oid === 'string' && typeof ver === 'string' && exp > Date.now() ? { oid, ver } : null
   } catch {
     return null
   }

@@ -11,7 +11,8 @@ import s from './KosItem.module.css'
  * memakai pola "stretched click target" supaya tombol "Pesan survei" tetap bisa diklik sendiri).
  */
 export default function KosItem({ kos }) {
-  const { id, nama, area, tipe, harga, fasilitas, verified, dicekPada, foto } = kos
+  const { id, nama, area, tipe, harga, fasilitas, verified, dicekPada, foto, periode_harga } = kos
+  const unit = periode_harga === 'bulan' ? 'per bulan' : periode_harga === 'tahun' ? 'per tahun' : '(periode belum dikonfirmasi)'
   const [open, setOpen] = useState(false)
   const panelId = `detail-${id}`
 
@@ -50,7 +51,7 @@ export default function KosItem({ kos }) {
         <div className={s.side}>
           <p className={s.price}>
             <strong>{rupiah(harga)}</strong>
-            <span className={s.unit}> per bulan</span>
+            <span className={s.unit}> {unit}</span>
           </p>
           {verified ? (
             <p className={s.verified}>
@@ -86,7 +87,7 @@ export default function KosItem({ kos }) {
               </div>
               <div>
                 <dt>Harga</dt>
-                <dd>{rupiah(harga)} per bulan</dd>
+                <dd>{rupiah(harga)} {unit}</dd>
               </div>
               <div>
                 <dt>Status</dt>

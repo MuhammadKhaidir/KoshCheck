@@ -50,6 +50,8 @@ function ChangePassword({ onDone }) {
     try {
       const { res, data } = await call({ action: 'password', password: form.password, newPassword: form.newPassword })
       if (!res.ok) throw new Error(data.error || 'Password belum bisa diganti.')
+      clearOwnerToken()
+      window.location.hash = '#/masuk'
       onDone()
     } catch (err) {
       setError(err.message)
@@ -202,7 +204,7 @@ export default function OwnerPage() {
                       <th scope="col">Nama kos</th>
                       <th scope="col">Area</th>
                       <th scope="col">Tipe</th>
-                      <th scope="col">Harga / bulan</th>
+                      <th scope="col">Harga sewa</th>
                       <th scope="col">Status pesanan</th>
                     </tr>
                   </thead>
@@ -214,7 +216,7 @@ export default function OwnerPage() {
                           <td className={s.wrap}>{k.kos}</td>
                           <td className={s.wrap}>{k.area}</td>
                           <td>{k.tipe || '-'}</td>
-                          <td className={s.nowrap}>{k.harga ? rupiah(k.harga) : '-'}</td>
+                          <td className={s.nowrap}>{k.harga ? `${rupiah(k.harga)} ${k.periode_harga === 'bulan' ? '/ bulan' : k.periode_harga === 'tahun' ? '/ tahun' : '(periode belum dikonfirmasi)'}` : '-'}</td>
                           <td>
                             <span className={`${s.badge} ${st.tone}`}>{st.label}</span>
                           </td>

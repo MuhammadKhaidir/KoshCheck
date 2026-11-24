@@ -5,7 +5,7 @@ import { compressImage } from '../lib/image.js'
 import { FASILITAS, TIPE } from '../data/kos.js'
 import s from './AddListingForm.module.css'
 
-const EMPTY = { nama: '', whatsapp: '', kos: '', area: '', catatan: '', tipe: '', harga: '' }
+const EMPTY = { nama: '', whatsapp: '', kos: '', area: '', catatan: '', tipe: '', harga: '', periode_harga: '' }
 
 /** Form tambah listing kos (+ foto) di halaman database. onSaved() dipanggil setelah berhasil disimpan. */
 export default function AddListingForm({ onSaved, listing = null, onCancel }) {
@@ -14,6 +14,7 @@ export default function AddListingForm({ onSaved, listing = null, onCancel }) {
     nama: listing.nama ?? '', whatsapp: listing.whatsapp ?? '', kos: listing.kos ?? '',
     area: listing.area ?? '', catatan: listing.catatan ?? '', tipe: listing.tipe ?? '',
     harga: listing.harga == null ? '' : String(listing.harga),
+    periode_harga: listing.periode_harga ?? '',
   } : EMPTY)
   const [fasilitas, setFasilitas] = useState(() => String(listing?.fasilitas ?? '').split(',').map((item) => item.trim()).filter(Boolean))
   const [foto, setFoto] = useState(listing?.foto ?? '')
@@ -102,8 +103,14 @@ export default function AddListingForm({ onSaved, listing = null, onCancel }) {
           </select>
         </div>
         <div className={s.field}>
-          <label htmlFor="al-harga">Harga per tahun (Rp)</label>
-          <input id="al-harga" required type="number" inputMode="numeric" min={50000} step={50000} value={form.harga} onChange={set('harga')} />
+          <label htmlFor="al-harga">Harga sewa (Rp)</label>
+          <input id="al-harga" required type="number" inputMode="numeric" min={50000} max={50000000} step={1} value={form.harga} onChange={set('harga')} />
+          <label htmlFor="al-periode">Periode harga</label>
+          <select id="al-periode" required value={form.periode_harga} onChange={set('periode_harga')}>
+            <option value="">Pilih periode</option>
+            <option value="bulan">Per bulan</option>
+            <option value="tahun">Per tahun</option>
+          </select>
         </div>
         <fieldset className={`${s.field} ${s.wide} ${s.checks}`}>
           <legend>Fasilitas</legend>
